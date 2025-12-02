@@ -9,6 +9,7 @@ export interface Message {
     status?: 'sent' | 'delivered' | 'read';
     type: 'text' | 'image' | 'audio';
     mediaUrl?: string;
+    isMesh?: boolean;
 }
 
 export interface Peer {
@@ -36,23 +37,27 @@ export interface Chat {
     lastMessageTime?: string;
 }
 
+import type { MeshPeer } from '../services/mesh/types';
+
 interface ChatState {
     currentUser: User | null;
     activeChat: string | null;
     mobileView: 'list' | 'chat';
+    isOfflineMode: boolean;
     chats: Chat[];
     messages: Record<string, Message[]>; // chatId -> messages
-    peers: Peer[];
+    peers: MeshPeer[];
 
     setCurrentUser: (user: User | null) => void;
     updateUserName: (name: string) => void;
     setActiveChat: (chatId: string) => void;
     setMobileView: (view: 'list' | 'chat') => void;
+    setOfflineMode: (isOffline: boolean) => void;
+    addPeer: (peer: MeshPeer) => void;
     addMessage: (chatId: string, message: Message) => void;
     setMessages: (chatId: string, messages: Message[]) => void;
-    addPeer: (peer: Peer) => void;
     updatePeerStatus: (peerId: string, status: Peer['status']) => void;
-    createDirectChat: (address: string) => void;
+    createDirectChat: (participant: string) => void;
     createGroupChat: (name: string, addresses: string[]) => void;
 }
 
@@ -60,6 +65,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
     currentUser: null,
     activeChat: null,
     mobileView: 'list',
+    isOfflineMode: false,
     chats: [
         {
             id: '1',
@@ -86,6 +92,12 @@ export const useChatStore = create<ChatState>((set, get) => ({
     })),
     setActiveChat: (chatId) => set({ activeChat: chatId, mobileView: 'chat' }),
     setMobileView: (view) => set({ mobileView: view }),
+    setOfflineMode: (isOffline) => set({ isOfflineMode: isOffline }),
+    addPeer: (peer) => set((state) => {
+        const exists = state.peers.some(p => p.id === peer.id);
+        if (exists) return state;
+        return { peers: [...state.peers, peer] };
+    }),
 
     addMessage: (chatId, message) => set((state) => ({
         messages: {
@@ -101,9 +113,6 @@ export const useChatStore = create<ChatState>((set, get) => ({
         }
     })),
 
-    addPeer: (peer) => set((state) => ({
-        peers: [...state.peers, peer]
-    })),
     updatePeerStatus: (peerId, status) => set((state) => ({
         peers: state.peers.map(p => p.id === peerId ? { ...p, status } : p)
     })),

@@ -1,14 +1,15 @@
 import { useState, useRef, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { Play, Square } from 'lucide-react';
+import { Play, Square, Bluetooth } from 'lucide-react';
 
 interface MessageBubbleProps {
     text: string;
     isSent: boolean;
     timestamp: string;
     sender: string;
-    type?: 'text' | 'image' | 'audio';
+    type: 'text' | 'image' | 'audio';
     mediaUrl?: string;
+    isMesh?: boolean;
 }
 
 const AudioPlayer = ({ src }: { src: string }) => {
@@ -47,7 +48,7 @@ const AudioPlayer = ({ src }: { src: string }) => {
     );
 };
 
-export const MessageBubble = ({ text, isSent, timestamp, sender, type = 'text', mediaUrl }: MessageBubbleProps) => {
+export const MessageBubble = ({ text, isSent, timestamp, sender, type = 'text', mediaUrl, isMesh }: MessageBubbleProps) => {
     return (
         <motion.div
             initial={{ opacity: 0, x: isSent ? 20 : -20 }}
@@ -58,7 +59,20 @@ export const MessageBubble = ({ text, isSent, timestamp, sender, type = 'text', 
                 <span className={`text-[10px] font-mono mr-2 ${isSent ? 'text-cyber-yellow' : 'text-cyber-amber'}`}>
                     {sender}
                 </span>
-                <span className="text-[10px] text-gray-500 font-mono">{timestamp}</span>
+                <div className="flex items-center justify-between mt-1 gap-4">
+                    <div className="flex items-center gap-2">
+                        <span className="text-[10px] opacity-50 font-mono">{timestamp}</span>
+                        {isMesh && (
+                            <span className="text-[9px] font-mono text-blue-400 flex items-center gap-0.5">
+                                <Bluetooth className="w-2 h-2" />
+                                MESH
+                            </span>
+                        )}
+                    </div>
+                    {isSent && (
+                        <span className="text-[10px] font-mono text-cyber-yellow">SENT</span>
+                    )}
+                </div>
             </div>
 
             <div

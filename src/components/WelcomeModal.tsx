@@ -1,6 +1,6 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { motion } from 'framer-motion';
-import { Terminal, Shield, Lock } from 'lucide-react';
+import { Terminal, Shield, Globe, Bluetooth } from 'lucide-react';
 
 interface WelcomeModalProps {
     onClose: () => void;
@@ -12,27 +12,36 @@ export const WelcomeModal = ({ onClose }: WelcomeModalProps) => {
     const steps = [
         {
             icon: Terminal,
-            title: 'SYSTEM_INITIALIZED',
-            desc: 'Welcome to the encrypted mesh network. Your connection is secure.',
+            title: "INITIALIZING_PROTOCOL",
+            desc: "Welcome to AnonChat. A decentralized, secure communication terminal for the modern web."
         },
         {
             icon: Shield,
-            title: 'ANONYMITY_PROTOCOL',
-            desc: 'Identity masked. Communication encrypted. No logs retained.',
+            title: "ZERO_KNOWLEDGE",
+            desc: "No servers. No logs. Your identity is cryptographically generated and ephemeral."
         },
         {
-            icon: Lock,
-            title: 'SECURE_CHANNEL',
-            desc: 'End-to-end encryption active. You are ready to transmit.',
+            icon: Bluetooth,
+            title: "MESH_NETWORK",
+            desc: "Offline capabilities enabled. Connect with nearby peers via Bluetooth Mesh when the grid goes down."
         },
+        {
+            icon: Globe,
+            title: "READY_TO_CONNECT",
+            desc: "System checks complete. Uplink established. You may now begin transmission."
+        }
     ];
 
-    useEffect(() => {
-        const timer = setInterval(() => {
-            setStep((prev) => (prev < steps.length - 1 ? prev + 1 : prev));
-        }, 1500);
-        return () => clearInterval(timer);
-    }, []);
+    const handleNext = () => {
+        if (step < steps.length - 1) {
+            setStep(step + 1);
+        } else {
+            onClose();
+        }
+    };
+
+    // The useEffect for auto-advancing steps is removed as per the instruction's implied change
+    // and the introduction of handleNext for manual progression.
 
     return (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/90 backdrop-blur-md">
@@ -76,12 +85,9 @@ export const WelcomeModal = ({ onClose }: WelcomeModalProps) => {
                 </div>
 
                 <button
-                    onClick={onClose}
-                    disabled={step < steps.length - 1}
-                    className={`w-full py-4 font-mono text-sm tracking-widest transition-all border ${step < steps.length - 1
-                        ? 'border-gray-800 text-gray-600 cursor-not-allowed'
-                        : 'border-cyber-yellow text-cyber-black bg-cyber-yellow hover:bg-white hover:border-white'
-                        }`}
+                    onClick={handleNext}
+                    className="w-full px-6 py-2 font-mono font-bold transition-colors
+                        bg-cyber-yellow text-black hover:bg-white"
                 >
                     {step < steps.length - 1 ? 'INITIALIZING...' : 'ENTER_SYSTEM >'}
                 </button>
