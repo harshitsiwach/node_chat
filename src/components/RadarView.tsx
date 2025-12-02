@@ -1,5 +1,5 @@
 
-import { Bluetooth, X, Wifi } from 'lucide-react';
+import { Bluetooth, X, Wifi, Radar } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useChatStore } from '../store/useChatStore';
 import type { MeshPeer } from '../services/mesh/types';
@@ -9,7 +9,7 @@ interface RadarViewProps {
 }
 
 export const RadarView = ({ onClose }: RadarViewProps) => {
-    const { peers, createDirectChat } = useChatStore();
+    const { peers, wifiPeers, createDirectChat } = useChatStore();
 
     // Generate random positions for peers (stable based on ID)
     const getPosition = (id: string) => {
@@ -22,7 +22,7 @@ export const RadarView = ({ onClose }: RadarViewProps) => {
         };
     };
 
-    const handlePeerClick = (peer: MeshPeer) => {
+    const handlePeerClick = (peer: MeshPeer | any) => {
         createDirectChat(peer.id);
         onClose();
     };
@@ -38,8 +38,8 @@ export const RadarView = ({ onClose }: RadarViewProps) => {
 
             <div className="text-center mb-12">
                 <h2 className="text-3xl font-mono text-cyber-yellow mb-2 tracking-widest flex items-center justify-center gap-3">
-                    <Bluetooth className="w-8 h-8 animate-pulse" />
-                    MESH_RADAR
+                    <Radar className="w-8 h-8 animate-pulse" />
+                    NETWORK_RADAR
                 </h2>
                 <p className="text-blue-400 font-mono text-sm">SCANNING_LOCAL_FREQUENCIES...</p>
             </div>
@@ -72,7 +72,7 @@ export const RadarView = ({ onClose }: RadarViewProps) => {
                     </div>
                 </div>
 
-                {/* Peers */}
+                {/* Bluetooth Peers */}
                 <AnimatePresence>
                     {peers.map((peer) => {
                         const pos = getPosition(peer.id);
@@ -86,18 +86,43 @@ export const RadarView = ({ onClose }: RadarViewProps) => {
                                 onClick={() => handlePeerClick(peer)}
                                 className="absolute w-3 h-3 bg-blue-400 rounded-full shadow-[0_0_10px_#60A5FA] z-20 group cursor-pointer"
                                 style={{
-                                    left: `${50 + pos.x}% `,
-                                    top: `${50 + pos.y}% `
+                                    left: `${50 + pos.x}%`,
+                                    top: `${50 + pos.y}%`
                                 }}
                             >
-                                {/* Peer Label */}
                                 <div className="absolute -bottom-8 left-1/2 -translate-x-1/2 whitespace-nowrap bg-black/80 border border-blue-500/50 px-2 py-1 rounded text-[10px] font-mono text-blue-400 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-30">
+                                    <Bluetooth className="w-3 h-3 inline mr-1" />
                                     {peer.name}
-                                    <div className="text-[8px] text-gray-500">{peer.id.slice(0, 6)}...</div>
                                 </div>
-
-                                {/* Ping Animation */}
                                 <div className="absolute inset-0 rounded-full border border-blue-400 animate-ping opacity-50"></div>
+                            </motion.button>
+                        );
+                    })}
+                </AnimatePresence>
+
+                {/* Wi-Fi Peers */}
+                <AnimatePresence>
+                    {wifiPeers.map((peer) => {
+                        const pos = getPosition(peer.id);
+                        return (
+                            <motion.button
+                                key={peer.id}
+                                initial={{ scale: 0, opacity: 0 }}
+                                animate={{ scale: 1, opacity: 1 }}
+                                exit={{ scale: 0, opacity: 0 }}
+                                whileHover={{ scale: 1.2 }}
+                                onClick={() => handlePeerClick(peer)}
+                                className="absolute w-3 h-3 bg-green-400 rounded-full shadow-[0_0_10px_#4ADE80] z-20 group cursor-pointer"
+                                style={{
+                                    left: `${50 + pos.x}%`,
+                                    top: `${50 + pos.y}%`
+                                }}
+                            >
+                                <div className="absolute -bottom-8 left-1/2 -translate-x-1/2 whitespace-nowrap bg-black/80 border border-green-500/50 px-2 py-1 rounded text-[10px] font-mono text-green-400 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-30">
+                                    <Wifi className="w-3 h-3 inline mr-1" />
+                                    {peer.name}
+                                </div>
+                                <div className="absolute inset-0 rounded-full border border-green-400 animate-ping opacity-50"></div>
                             </motion.button>
                         );
                     })}
@@ -111,11 +136,11 @@ export const RadarView = ({ onClose }: RadarViewProps) => {
                 </div>
                 <div className="flex items-center gap-2">
                     <div className="w-2 h-2 bg-blue-400 rounded-full"></div>
-                    <span>ACTIVE_PEER</span>
+                    <span>BLUETOOTH_PEER</span>
                 </div>
                 <div className="flex items-center gap-2">
-                    <Wifi className="w-3 h-3" />
-                    <span>{peers.length} NODES_DETECTED</span>
+                    <div className="w-2 h-2 bg-green-400 rounded-full"></div>
+                    <span>WIFI_PEER</span>
                 </div>
             </div>
         </div>

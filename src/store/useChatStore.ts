@@ -38,22 +38,27 @@ export interface Chat {
 }
 
 import type { MeshPeer } from '../services/mesh/types';
+import type { WifiPeer } from '../services/wifi/types';
 
 interface ChatState {
     currentUser: User | null;
     activeChat: string | null;
     mobileView: 'list' | 'chat';
     isOfflineMode: boolean;
+    isWifiMode: boolean;
     chats: Chat[];
     messages: Record<string, Message[]>; // chatId -> messages
     peers: MeshPeer[];
+    wifiPeers: WifiPeer[];
 
     setCurrentUser: (user: User | null) => void;
     updateUserName: (name: string) => void;
     setActiveChat: (chatId: string) => void;
     setMobileView: (view: 'list' | 'chat') => void;
     setOfflineMode: (isOffline: boolean) => void;
+    setWifiMode: (isWifi: boolean) => void;
     addPeer: (peer: MeshPeer) => void;
+    addWifiPeer: (peer: WifiPeer) => void;
     addMessage: (chatId: string, message: Message) => void;
     setMessages: (chatId: string, messages: Message[]) => void;
     updatePeerStatus: (peerId: string, status: Peer['status']) => void;
@@ -66,25 +71,33 @@ export const useChatStore = create<ChatState>((set, get) => ({
     activeChat: null,
     mobileView: 'list',
     isOfflineMode: false,
+    isWifiMode: false,
     chats: [
         {
             id: '1',
-            name: '0x1234...5678',
-            type: 'direct',
-            participants: ['0x1234...5678'],
-            unreadCount: 2,
-            status: 'online',
-            lastMessage: 'Coordinates received.',
-            lastMessageTime: '10:42'
-        },
+            name: 'General',
+            type: 'group',
+            participants: [],
+            unreadCount: 0,
+            lastMessage: 'Welcome to NODE Chat',
+            lastMessageTime: '12:00',
+            status: 'online'
+        }
     ],
     messages: {
-        'mission_control': [
-            { id: '1', text: 'System initialized.', isSent: false, timestamp: '10:00:00', sender: 'SYSTEM', status: 'read', type: 'text' },
-            { id: '2', text: 'Secure connection established.', isSent: false, timestamp: '10:00:01', sender: 'SYSTEM', status: 'read', type: 'text' },
+        '1': [
+            {
+                id: '1',
+                text: 'Welcome to NODE Chat. Messages are encrypted and stored locally.',
+                isSent: false,
+                timestamp: '12:00',
+                sender: 'System',
+                type: 'text'
+            }
         ]
     },
     peers: [],
+    wifiPeers: [],
 
     setCurrentUser: (user) => set({ currentUser: user }),
     updateUserName: (name) => set((state) => ({
@@ -93,10 +106,18 @@ export const useChatStore = create<ChatState>((set, get) => ({
     setActiveChat: (chatId) => set({ activeChat: chatId, mobileView: 'chat' }),
     setMobileView: (view) => set({ mobileView: view }),
     setOfflineMode: (isOffline) => set({ isOfflineMode: isOffline }),
+    setWifiMode: (isWifi) => set({ isWifiMode: isWifi }),
+
     addPeer: (peer) => set((state) => {
         const exists = state.peers.some(p => p.id === peer.id);
         if (exists) return state;
         return { peers: [...state.peers, peer] };
+    }),
+
+    addWifiPeer: (peer) => set((state) => {
+        const exists = state.wifiPeers.some(p => p.id === peer.id);
+        if (exists) return state;
+        return { wifiPeers: [...state.wifiPeers, peer] };
     }),
 
     addMessage: (chatId, message) => set((state) => ({

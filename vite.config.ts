@@ -10,9 +10,9 @@ export default defineConfig({
       registerType: 'autoUpdate',
       includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'masked-icon.svg'],
       manifest: {
-        name: 'AnonChat',
-        short_name: 'AnonChat',
-        description: 'Encrypted Cyber-Minimalist Mesh Chat',
+        name: 'NODE Chat',
+        short_name: 'NODE Chat',
+        description: 'Decentralized, Secure, Offline-First Communication',
         theme_color: '#000000',
         background_color: '#000000',
         display: 'standalone',

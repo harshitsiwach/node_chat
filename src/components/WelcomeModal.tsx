@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
-import { Terminal, Shield, Globe, Bluetooth } from 'lucide-react';
+import { Terminal, Shield, Globe, Bluetooth, Wifi } from 'lucide-react';
 
 interface WelcomeModalProps {
     onClose: () => void;
@@ -13,12 +13,17 @@ export const WelcomeModal = ({ onClose }: WelcomeModalProps) => {
         {
             icon: Terminal,
             title: "INITIALIZING_PROTOCOL",
-            desc: "Welcome to AnonChat. A decentralized, secure communication terminal for the modern web."
+            desc: "Welcome to NODE Chat. A decentralized, secure communication terminal for the modern web."
         },
         {
             icon: Shield,
             title: "ZERO_KNOWLEDGE",
             desc: "No servers. No logs. Your identity is cryptographically generated and ephemeral."
+        },
+        {
+            icon: Wifi,
+            title: "LOCAL_WIFI_CHAT",
+            desc: "High-speed local network chat. Connect with peers on the same Wi-Fi network for group messaging."
         },
         {
             icon: Bluetooth,
@@ -89,7 +94,7 @@ export const WelcomeModal = ({ onClose }: WelcomeModalProps) => {
                     className="w-full px-6 py-2 font-mono font-bold transition-colors
                         bg-cyber-yellow text-black hover:bg-white"
                 >
-                    {step < steps.length - 1 ? 'INITIALIZING...' : 'ENTER_SYSTEM >'}
+                    {step < steps.length - 1 ? 'START' : 'ENTER_SYSTEM >'}
                 </button>
             </motion.div>
         </div>

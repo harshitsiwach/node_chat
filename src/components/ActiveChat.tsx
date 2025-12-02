@@ -2,13 +2,14 @@
 import { useEffect, useRef } from 'react';
 import { MessageBubble } from './MessageBubble';
 import { TerminalInput } from './TerminalInput';
-import { Hash, Lock, ChevronLeft, Bluetooth } from 'lucide-react';
+import { Hash, Lock, ChevronLeft, Bluetooth, Wifi } from 'lucide-react';
 import { useChatStore } from '../store/useChatStore';
 import { meshService } from '../services/mesh/MeshService';
+import { wifiService } from '../services/wifi/WifiService';
 import { storageService } from '../services/storage';
 
 export const ActiveChat = () => {
-    const { activeChat, messages, addMessage, setMessages, setMobileView, isOfflineMode, currentUser } = useChatStore();
+    const { activeChat, messages, addMessage, setMessages, setMobileView, isOfflineMode, isWifiMode, currentUser } = useChatStore();
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const currentMessages = activeChat ? (messages[activeChat] || []) : [];
 
@@ -52,6 +53,26 @@ export const ActiveChat = () => {
         }
     }, [isOfflineMode, activeChat, addMessage]);
 
+    // Listen for incoming wifi messages
+    useEffect(() => {
+        if (isWifiMode) {
+            wifiService.onMessage((msg) => {
+                if (activeChat) {
+                    addMessage(activeChat, {
+                        id: msg.id,
+                        text: msg.text,
+                        isSent: false,
+                        timestamp: new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+                        sender: msg.senderName,
+                        status: 'read',
+                        type: 'text',
+                        isMesh: true // Reuse mesh badge for now, or add isWifi
+                    });
+                }
+            });
+        }
+    }, [isWifiMode, activeChat, addMessage]);
+
     const handleSendMessage = async (text: string, type: 'text' | 'image' | 'audio' = 'text', mediaUrl?: string) => {
         if (!activeChat || !currentUser) return;
 
@@ -72,6 +93,8 @@ export const ActiveChat = () => {
 
         if (isOfflineMode) {
             await meshService.sendMessage(text, currentUser.id, currentUser.name);
+        } else if (isWifiMode) {
+            await wifiService.sendMessage(text, currentUser.id, currentUser.name);
         } else {
             // Normal online sending logic (stubbed)
         }
@@ -101,6 +124,11 @@ export const ActiveChat = () => {
                         <div className="flex items-center gap-1 bg-blue-900/30 px-2 py-1 rounded border border-blue-500/30">
                             <Bluetooth className="w-3 h-3 text-blue-400 animate-pulse" />
                             <span className="text-[10px] font-mono text-blue-400">MESH_NET</span>
+                        </div>
+                    ) : isWifiMode ? (
+                        <div className="flex items-center gap-1 bg-green-900/30 px-2 py-1 rounded border border-green-500/30">
+                            <Wifi className="w-3 h-3 text-green-400 animate-pulse" />
+                            <span className="text-[10px] font-mono text-green-400">WIFI_DIRECT</span>
                         </div>
                     ) : (
                         <>

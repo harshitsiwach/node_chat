@@ -5,22 +5,35 @@ import { SettingsModal } from './SettingsModal';
 import { RadarView } from './RadarView';
 import { useChatStore } from '../store/useChatStore';
 import { meshService } from '../services/mesh/MeshService';
+import { wifiService } from '../services/wifi/WifiService';
 
 export const Sidebar = () => {
     const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
     const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
     const [isRadarOpen, setIsRadarOpen] = useState(false);
-    const { currentUser, isOfflineMode, setOfflineMode, peers, addPeer } = useChatStore();
+    const { currentUser, isOfflineMode, setOfflineMode, isWifiMode, setWifiMode, peers, addPeer, addWifiPeer } = useChatStore();
 
     useEffect(() => {
         if (isOfflineMode && currentUser) {
-            meshService.initialize(currentUser.id, currentUser.name);
-            meshService.start();
+            meshService.start((peer) => addPeer(peer));
+        } else {
+            meshService.stop();
+        }
+    }, [isOfflineMode, currentUser, addPeer]);
 
-            meshService.onPeerFound((peer) => {
-                addPeer(peer);
-            });
+    useEffect(() => {
+        if (isWifiMode && currentUser) {
+            wifiService.start((peer) => addWifiPeer(peer));
+        } else {
+            wifiService.stop();
+        }
+    }, [isWifiMode, currentUser, addWifiPeer]);
 
+    // This part was originally inside the meshService useEffect, but the instruction implies it's now separate or handled differently.
+    // Keeping it here for context, but it's not part of the explicit instruction to move/change it.
+    // If meshService.start now handles peer finding, this onMessage handler might need to be re-evaluated.
+    useEffect(() => {
+        if (currentUser) { // Assuming message handling is always active if currentUser exists
             meshService.onMessage((msg) => {
                 // For demo, we just dump everything into a "Public Mesh" chat or the active chat
                 // Ideally, we'd route based on channelId
@@ -56,13 +69,24 @@ export const Sidebar = () => {
                         }`}
                     title={isOfflineMode ? "Disable Mesh Mode" : "Enable Mesh Mode"}
                 >
-                    {isOfflineMode ? <Bluetooth className="w-5 h-5 animate-pulse" /> : <Wifi className="w-5 h-5" />}
+                    <Bluetooth className={`w-5 h-5 ${isOfflineMode ? 'animate-pulse' : ''}`} />
                 </button>
 
-                {isOfflineMode && (
+                <button
+                    onClick={() => setWifiMode(!isWifiMode)}
+                    className={`w-10 h-10 rounded-full flex items-center justify-center transition-all duration-300 ${isWifiMode
+                        ? 'bg-green-500/20 text-green-400 border border-green-500 shadow-[0_0_10px_rgba(34,197,94,0.3)]'
+                        : 'bg-gray-800 text-gray-500 hover:text-white'
+                        }`}
+                    title={isWifiMode ? "Disable Wi-Fi Mode" : "Enable Wi-Fi Mode"}
+                >
+                    <Wifi className={`w-5 h-5 ${isWifiMode ? 'animate-pulse' : ''}`} />
+                </button>
+
+                {(isOfflineMode || isWifiMode) && (
                     <button
                         onClick={() => setIsRadarOpen(true)}
-                        className="w-10 h-10 rounded-full bg-blue-900/30 text-blue-400 border border-blue-500/50 hover:bg-blue-500/20 flex items-center justify-center transition-all duration-300 animate-pulse"
+                        className="w-10 h-10 rounded-full bg-purple-900/30 text-purple-400 border border-purple-500/50 hover:bg-purple-500/20 flex items-center justify-center transition-all duration-300 animate-pulse"
                         title="Open Radar"
                     >
                         <Radar className="w-5 h-5" />
