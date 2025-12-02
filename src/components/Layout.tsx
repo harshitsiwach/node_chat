@@ -11,11 +11,16 @@ import { ProfileModal } from './ProfileModal';
 import { useChatStore } from '../store/useChatStore';
 import { User as UserIcon } from 'lucide-react';
 
+import { NetworkModal } from './NetworkModal';
+import { RadarView } from './RadarView';
+
 export const Layout = () => {
     const [showWelcome, setShowWelcome] = useState(false);
     const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
     const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
     const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
+    const [isNetworkModalOpen, setIsNetworkModalOpen] = useState(false);
+    const [isRadarOpen, setIsRadarOpen] = useState(false);
     const { mobileView, currentUser } = useChatStore();
 
     useEffect(() => {
@@ -66,6 +71,7 @@ export const Layout = () => {
                 <MobileNavBar
                     onNewChat={() => setIsCreateModalOpen(true)}
                     onSettings={() => setIsSettingsModalOpen(true)}
+                    onNetwork={() => setIsNetworkModalOpen(true)}
                 />
             </div>
 
@@ -82,6 +88,12 @@ export const Layout = () => {
                 isOpen={isProfileModalOpen}
                 onClose={() => setIsProfileModalOpen(false)}
             />
+            <NetworkModal
+                isOpen={isNetworkModalOpen}
+                onClose={() => setIsNetworkModalOpen(false)}
+                onOpenRadar={() => setIsRadarOpen(true)}
+            />
+            {isRadarOpen && <RadarView onClose={() => setIsRadarOpen(false)} />}
         </div>
     );
 };
