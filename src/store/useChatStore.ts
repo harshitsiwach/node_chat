@@ -44,7 +44,7 @@ interface ChatState {
     messages: Record<string, Message[]>; // chatId -> messages
     peers: Peer[];
 
-    setCurrentUser: (user: User) => void;
+    setCurrentUser: (user: User | null) => void;
     updateUserName: (name: string) => void;
     setActiveChat: (chatId: string) => void;
     setMobileView: (view: 'list' | 'chat') => void;

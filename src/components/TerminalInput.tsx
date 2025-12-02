@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react';
-import { Image, Mic, Square } from 'lucide-react';
+import { Image, Mic, Square, Send } from 'lucide-react';
 
 interface TerminalInputProps {
   onSendMessage: (message: string, type: 'text' | 'image' | 'audio', mediaUrl?: string) => void;
@@ -133,6 +133,22 @@ export const TerminalInput = ({ onSendMessage }: TerminalInputProps) => {
       <span
         className={`w-2 h-4 bg-cyber-yellow ml-1 ${isFocused && !isRecording ? 'animate-pulse' : 'opacity-0'}`}
       />
+
+      <button
+        onClick={(e) => {
+          e.stopPropagation();
+          if (input.trim()) {
+            onSendMessage(input, 'text');
+            setInput('');
+            inputRef.current?.focus();
+          }
+        }}
+        disabled={!input.trim()}
+        className={`p-1 ml-2 transition-colors ${input.trim() ? 'text-cyber-yellow hover:text-white' : 'text-gray-700 cursor-not-allowed'}`}
+        title="Send Message"
+      >
+        <Send className="w-4 h-4" />
+      </button>
     </div>
   );
 };

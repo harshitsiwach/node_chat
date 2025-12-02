@@ -1,61 +1,90 @@
-import { useConnect, useAccount } from 'wagmi';
-import { Shield, Terminal, AlertTriangle } from 'lucide-react';
+import { useAccount, useConnect } from 'wagmi';
+import { useState } from 'react';
+import { Shield, Terminal, Globe } from 'lucide-react';
+import { generatePrivateKey, privateKeyToAccount } from 'viem/accounts';
+import { useChatStore } from '../store/useChatStore';
+import { GuestKeyModal } from './GuestKeyModal';
 
 export const WalletConnect = () => {
-    const { connectors, connect, isPending, error } = useConnect();
     const { isConnected } = useAccount();
+    const { connectors, connect } = useConnect();
+    const { currentUser, setCurrentUser } = useChatStore();
+    const [showGuestModal, setShowGuestModal] = useState(false);
+    const [guestCreds, setGuestCreds] = useState<{ address: string; privateKey: string } | null>(null);
 
-    if (isConnected) return null;
+    const handleGuestLogin = () => {
+        const privateKey = generatePrivateKey();
+        const account = privateKeyToAccount(privateKey);
+        setGuestCreds({ address: account.address, privateKey });
+        setShowGuestModal(true);
+    };
+
+    const confirmGuestLogin = () => {
+        if (guestCreds) {
+            setCurrentUser({
+                id: guestCreds.address,
+                name: `Guest_${guestCreds.address.slice(0, 4)}`,
+                address: guestCreds.address
+            });
+            localStorage.setItem('guest_identity', JSON.stringify(guestCreds));
+            setShowGuestModal(false);
+        }
+    };
+
+    if (isConnected || currentUser) return null;
 
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-cyber-black/90 backdrop-blur-sm">
-            <div className="w-full max-w-md p-8 border border-cyber-yellow bg-cyber-black relative overflow-hidden">
-                {/* Scanline effect for modal */}
-                <div className="absolute inset-0 scanline pointer-events-none opacity-10"></div>
+        <>
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 backdrop-blur-sm">
+                <div className="w-full max-w-md p-8 border border-cyber-yellow bg-cyber-black relative shadow-[0_0_50px_rgba(255,215,0,0.1)]">
+                    {/* Decorative corners */}
+                    <div className="absolute top-0 left-0 w-4 h-4 border-t-2 border-l-2 border-cyber-yellow"></div>
+                    <div className="absolute top-0 right-0 w-4 h-4 border-t-2 border-r-2 border-cyber-yellow"></div>
+                    <div className="absolute bottom-0 left-0 w-4 h-4 border-b-2 border-l-2 border-cyber-yellow"></div>
+                    <div className="absolute bottom-0 right-0 w-4 h-4 border-b-2 border-r-2 border-cyber-yellow"></div>
 
-                <div className="flex flex-col items-center text-center relative z-10">
-                    <div className="w-16 h-16 border border-cyber-yellow flex items-center justify-center mb-6 animate-pulse">
-                        <Shield className="w-8 h-8 text-cyber-yellow" />
+                    <div className="text-center mb-8">
+                        <Shield className="w-16 h-16 text-cyber-yellow mx-auto mb-4 animate-pulse" />
+                        <h2 className="text-2xl font-mono text-white mb-2 tracking-widest">AUTHENTICATION_REQUIRED</h2>
+                        <p className="text-gray-500 font-mono text-sm">ESTABLISH_SECURE_UPLINK</p>
                     </div>
 
-                    <h2 className="text-2xl font-mono font-bold text-cyber-yellow mb-2">
-                        AUTHENTICATION REQUIRED
-                    </h2>
-
-                    <p className="text-gray-400 font-mono text-sm mb-8">
-                        Connect your secure wallet to access the encrypted network.
-                    </p>
-
-                    <div className="w-full space-y-4">
+                    <div className="space-y-4">
                         {connectors.map((connector) => (
                             <button
                                 key={connector.uid}
                                 onClick={() => connect({ connector })}
-                                disabled={isPending}
-                                className="w-full p-4 border border-cyber-yellow text-cyber-yellow font-mono hover:bg-cyber-yellow hover:text-cyber-black transition-all duration-200 flex items-center justify-center group relative overflow-hidden"
+                                className="w-full py-4 border border-gray-700 hover:border-cyber-yellow text-gray-400 hover:text-cyber-yellow transition-all font-mono text-sm tracking-wider flex items-center justify-center gap-3 group"
                             >
-                                <span className="relative z-10 flex items-center">
-                                    <Terminal className="w-4 h-4 mr-2" />
-                                    {isPending ? 'ESTABLISHING CONNECTION...' : `CONNECT VIA ${connector.name.toUpperCase()}`}
-                                </span>
-                                {/* Glitch hover effect */}
-                                <div className="absolute inset-0 bg-cyber-yellow translate-x-[-100%] group-hover:translate-x-0 transition-transform duration-300 ease-out z-0"></div>
+                                <Terminal className="w-4 h-4 group-hover:animate-bounce" />
+                                CONNECT_VIA_{connector.name.toUpperCase()}
                             </button>
                         ))}
-                    </div>
 
-                    {error && (
-                        <div className="mt-6 p-3 border border-red-500 bg-red-500/10 text-red-500 text-xs font-mono flex items-center w-full">
-                            <AlertTriangle className="w-4 h-4 mr-2" />
-                            {error.message}
+                        <div className="relative flex py-2 items-center">
+                            <div className="flex-grow border-t border-gray-800"></div>
+                            <span className="flex-shrink-0 mx-4 text-gray-600 font-mono text-xs">OR</span>
+                            <div className="flex-grow border-t border-gray-800"></div>
                         </div>
-                    )}
 
-                    <div className="mt-8 text-[10px] text-gray-600 font-mono">
-                        SECURE PROTOCOL V.1.0.4 // ENCRYPTED
+                        <button
+                            onClick={handleGuestLogin}
+                            className="w-full py-4 bg-cyber-gray border border-gray-600 hover:border-white text-white transition-all font-mono text-sm tracking-wider flex items-center justify-center gap-3"
+                        >
+                            <Globe className="w-4 h-4" />
+                            GENERATE_GUEST_IDENTITY
+                        </button>
                     </div>
                 </div>
             </div>
-        </div>
+
+            {showGuestModal && guestCreds && (
+                <GuestKeyModal
+                    address={guestCreds.address}
+                    privateKey={guestCreds.privateKey}
+                    onConfirm={confirmGuestLogin}
+                />
+            )}
+        </>
     );
 };
