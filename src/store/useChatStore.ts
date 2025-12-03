@@ -96,6 +96,7 @@ interface ChatState {
     addReaction: (chatId: string, messageId: string, emoji: string, walletAddress: string) => void;
     pinMessage: (chatId: string, messageId: string, isPinned: boolean) => void;
     votePoll: (chatId: string, messageId: string, optionId: number, walletAddress: string) => void;
+    joinGlobalChannel: () => void;
 }
 
 export const useChatStore = create<ChatState>((set, get) => ({
@@ -292,5 +293,27 @@ export const useChatStore = create<ChatState>((set, get) => ({
                 [chatId]: updatedMessages
             }
         };
-    })
+    }),
+    joinGlobalChannel: () => {
+        const GLOBAL_ID = 'global_public_channel';
+        const exists = get().chats.find(c => c.id === GLOBAL_ID);
+        if (exists) return;
+
+        const globalChat: Chat = {
+            id: GLOBAL_ID,
+            name: 'Global Public Chat',
+            type: 'group',
+            participants: [],
+            unreadCount: 0,
+            status: 'online',
+            metadata: {
+                ownerWallet: 'system',
+                groupKey: 'public_key'
+            }
+        };
+        set(state => ({
+            chats: [globalChat, ...state.chats],
+            messages: { ...state.messages, [GLOBAL_ID]: [] }
+        }));
+    }
 }));

@@ -1,5 +1,6 @@
 import { createPublicClient, http, parseAbi } from 'viem';
 import { baseSepolia } from 'viem/chains';
+import { mockRelayService } from '../relay/MockRelayService';
 
 export class NFTService {
     private client;
@@ -14,6 +15,11 @@ export class NFTService {
     // Check if a wallet owns at least one token of the given contract
     // Supports ERC-721 and ERC-1155 (balanceOf)
     async checkOwnership(walletAddress: string, contractAddress: string, tokenId?: string): Promise<boolean> {
+        // 1. Check Mock Relay first (for simulated "Deployed" contracts)
+        if (mockRelayService.hasMinted(contractAddress, walletAddress)) {
+            return true;
+        }
+
         try {
             const abi = parseAbi([
                 'function balanceOf(address owner) view returns (uint256)',

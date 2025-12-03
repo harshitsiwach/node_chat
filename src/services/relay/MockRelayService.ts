@@ -24,6 +24,9 @@ export interface GroupMetadata {
     members: string[]; // Wallet addresses
     groupKey: string; // Encrypted Group Key (Simulated as single key for simplicity in mock)
     pinnedMessageIds?: string[];
+    maxSupply?: number;
+    currentSupply?: number;
+    mintPrice?: string; // e.g. "0.01 ETH"
     // In real app, we'd store encrypted key PER MEMBER.
     // For mock, we'll just store the key and "pretend" we re-encrypt it for each member fetch.
 }
@@ -32,11 +35,98 @@ class MockRelayService {
     private users: Map<string, RelayUser> = new Map(); // wallet -> User
     private messages: Map<string, RelayMessage[]> = new Map(); // conversationId -> Messages
     private groups: Map<string, GroupMetadata> = new Map(); // groupId -> Group Metadata
+    private channel: BroadcastChannel;
+    private readonly GLOBAL_CHANNEL_ID = 'global_public_channel';
+
+    constructor() {
+        this.channel = new BroadcastChannel('mock_relay_channel');
+        this.channel.onmessage = (event) => this.handleBroadcastMessage(event.data);
+
+        // Initialize Global Channel
+        this.initializeGlobalChannel();
+    }
+
+    private initializeGlobalChannel() {
+        if (!this.groups.has(this.GLOBAL_CHANNEL_ID)) {
+            const globalGroup: GroupMetadata = {
+                id: this.GLOBAL_CHANNEL_ID,
+                name: 'Global Public Chat',
+                nftContract: '', // No contract
+                ownerWallet: 'system',
+                members: [], // Will auto-add users
+                groupKey: 'public_key', // Public key for everyone
+                maxSupply: 0, // Infinite
+                currentSupply: 0
+            };
+            this.groups.set(this.GLOBAL_CHANNEL_ID, globalGroup);
+            console.log('[Relay] Global Channel Initialized');
+        }
+    }
+
+    private handleBroadcastMessage(data: any) {
+        console.log('[Relay] Received broadcast:', data.type);
+        switch (data.type) {
+            case 'REGISTER_USER':
+                this.users.set(data.payload.walletAddress, data.payload);
+                // Auto-add to global channel locally if not present
+                this.addToGlobalChannel(data.payload.walletAddress);
+                break;
+            case 'SEND_MESSAGE':
+                const { message } = data.payload;
+                const msgs = this.messages.get(message.conversationId) || [];
+                // Avoid duplicates
+                if (!msgs.find(m => m.id === message.id)) {
+                    msgs.push(message);
+                    this.messages.set(message.conversationId, msgs);
+                }
+                break;
+            case 'CREATE_GROUP':
+                this.groups.set(data.payload.id, data.payload);
+                break;
+            case 'JOIN_GROUP':
+                const { groupId, walletAddress } = data.payload;
+                const group = this.groups.get(groupId);
+                if (group && !group.members.includes(walletAddress)) {
+                    group.members.push(walletAddress);
+                    this.groups.set(groupId, group);
+                }
+                break;
+            case 'DEPLOY_CONTRACT':
+                // No state to sync for deployment itself, but maybe useful for logs
+                break;
+            case 'MINT_MEMBERSHIP':
+                const { contractAddress, walletAddress: minter } = data.payload;
+                this.recordMint(contractAddress, minter);
+                // Also update group supply if it exists
+                const groupToUpdate = Array.from(this.groups.values()).find(g => g.nftContract === contractAddress);
+                if (groupToUpdate) {
+                    groupToUpdate.currentSupply = (groupToUpdate.currentSupply || 0) + 1;
+                    this.groups.set(groupToUpdate.id, groupToUpdate);
+                }
+                break;
+        }
+    }
 
     // Register a user's messaging public key
     async registerUser(walletAddress: string, publicKey: string) {
         this.users.set(walletAddress, { walletAddress, publicKey });
+
+        // Auto-join Global Channel
+        this.addToGlobalChannel(walletAddress);
+
+        this.channel.postMessage({
+            type: 'REGISTER_USER',
+            payload: { walletAddress, publicKey }
+        });
         console.log(`[Relay] Registered user ${walletAddress}`);
+    }
+
+    private addToGlobalChannel(walletAddress: string) {
+        const globalGroup = this.groups.get(this.GLOBAL_CHANNEL_ID);
+        if (globalGroup && !globalGroup.members.includes(walletAddress)) {
+            globalGroup.members.push(walletAddress);
+            this.groups.set(this.GLOBAL_CHANNEL_ID, globalGroup);
+        }
     }
 
     // Get a user's public key
@@ -52,8 +142,10 @@ class MockRelayService {
         this.messages.set(message.conversationId, msgs);
         console.log(`[Relay] Message stored for ${message.conversationId}`);
 
-        // In a real app, this would trigger a WebSocket event
-        // For now, we'll rely on polling or local state updates in the UI
+        this.channel.postMessage({
+            type: 'SEND_MESSAGE',
+            payload: { message }
+        });
     }
 
     // Fetch messages for a conversation
@@ -68,20 +160,29 @@ class MockRelayService {
     }
 
     // Create a Group
-    async createGroup(name: string, ownerWallet: string, nftContract: string, tokenId?: string): Promise<string> {
+    async createGroup(name: string, ownerWallet: string, nftContract: string, tokenId?: string, maxSupply?: number): Promise<string> {
         const groupId = `group_${Date.now()}`;
         // Generate a random group key (simulated)
         const groupKey = window.crypto.randomUUID();
 
-        this.groups.set(groupId, {
+        const newGroup: GroupMetadata = {
             id: groupId,
             name,
             nftContract,
             tokenId,
             ownerWallet,
             members: [ownerWallet],
-            groupKey
+            groupKey,
+            maxSupply,
+            currentSupply: 1 // Owner is first member/minter
+        };
+
+        this.groups.set(groupId, newGroup);
+        this.channel.postMessage({
+            type: 'CREATE_GROUP',
+            payload: newGroup
         });
+
         console.log(`[Relay] Group created: ${name} (${groupId})`);
         return groupId;
     }
@@ -95,6 +196,17 @@ class MockRelayService {
             return { success: true, groupKey: group.groupKey };
         }
 
+        // Bypass NFT check for Global Channel
+        if (groupId === this.GLOBAL_CHANNEL_ID) {
+            group.members.push(walletAddress);
+            this.groups.set(groupId, group);
+            this.channel.postMessage({
+                type: 'JOIN_GROUP',
+                payload: { groupId, walletAddress }
+            });
+            return { success: true, groupKey: group.groupKey };
+        }
+
         // Verify NFT Ownership
         const hasNFT = await nftService.checkOwnership(walletAddress, group.nftContract, group.tokenId);
         if (!hasNFT) {
@@ -104,6 +216,12 @@ class MockRelayService {
         // Add to members
         group.members.push(walletAddress);
         this.groups.set(groupId, group);
+
+        this.channel.postMessage({
+            type: 'JOIN_GROUP',
+            payload: { groupId, walletAddress }
+        });
+
         console.log(`[Relay] User ${walletAddress} joined group ${groupId}`);
 
         return { success: true, groupKey: group.groupKey };
@@ -124,6 +242,7 @@ class MockRelayService {
         if (!group.pinnedMessageIds.includes(messageId)) {
             group.pinnedMessageIds.push(messageId);
             this.groups.set(groupId, group);
+            // TODO: Broadcast pin event if needed
             console.log(`[Relay] Pinned message ${messageId} in group ${groupId}`);
         }
         return true;
@@ -136,6 +255,78 @@ class MockRelayService {
         group.pinnedMessageIds = group.pinnedMessageIds.filter(id => id !== messageId);
         this.groups.set(groupId, group);
         return true;
+    }
+
+    // --- NFT Factory Simulation ---
+
+    // Simulate deploying a new NFT contract
+    async deployGroupContract(name: string, symbol: string, maxSupply: number): Promise<string> {
+        // Simulate network delay
+        await new Promise(resolve => setTimeout(resolve, 2000));
+
+        const contractAddress = `0x${Array(40).fill(0).map(() => Math.floor(Math.random() * 16).toString(16)).join('')}`;
+        console.log(`[Relay] Deployed contract ${name} (${symbol}) at ${contractAddress} with supply ${maxSupply}`);
+
+        this.channel.postMessage({
+            type: 'DEPLOY_CONTRACT',
+            payload: { name, symbol, contractAddress, maxSupply }
+        });
+
+        return contractAddress;
+    }
+
+    // Simulate minting a membership NFT
+    async mintMembership(contractAddress: string, walletAddress: string): Promise<boolean> {
+        // Find group associated with this contract
+        const group = Array.from(this.groups.values()).find(g => g.nftContract === contractAddress);
+
+        if (!group) {
+            // If no group yet (just deployed), we might just track mints separately or assume success for now
+            // For the "Create Group" flow, the group is created AFTER deployment, so this might be called before group creation?
+            // Actually, the flow is: Deploy -> Show Address -> Create Group (on Relay) -> Mint.
+            // Or: Deploy -> Mint -> Create Group.
+
+            // Let's store "minted" state in a simple map for now to support the "checkOwnership" fallback
+            this.recordMint(contractAddress, walletAddress);
+            this.channel.postMessage({
+                type: 'MINT_MEMBERSHIP',
+                payload: { contractAddress, walletAddress }
+            });
+            return true;
+        }
+
+        if (group.maxSupply && (group.currentSupply || 0) >= group.maxSupply) {
+            throw new Error("Max supply reached");
+        }
+
+        // Simulate network delay
+        await new Promise(resolve => setTimeout(resolve, 1500));
+
+        group.currentSupply = (group.currentSupply || 0) + 1;
+        this.groups.set(group.id, group);
+        this.recordMint(contractAddress, walletAddress);
+
+        this.channel.postMessage({
+            type: 'MINT_MEMBERSHIP',
+            payload: { contractAddress, walletAddress }
+        });
+
+        console.log(`[Relay] Minted membership for ${walletAddress} on ${contractAddress}`);
+        return true;
+    }
+
+    // Helper to track mints for NFTService fallback
+    private mintedTokens: Map<string, Set<string>> = new Map(); // contract -> Set(wallets)
+
+    private recordMint(contract: string, wallet: string) {
+        if (!this.mintedTokens.has(contract)) {
+            this.mintedTokens.set(contract, new Set());
+        }
+        this.mintedTokens.get(contract)?.add(wallet);
+    }
+
+    hasMinted(contract: string, wallet: string): boolean {
+        return this.mintedTokens.get(contract)?.has(wallet) || false;
     }
 }
 

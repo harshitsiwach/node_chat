@@ -11,7 +11,11 @@ export const Sidebar = () => {
     const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
     const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
     const [isRadarOpen, setIsRadarOpen] = useState(false);
-    const { currentUser, isOfflineMode, setOfflineMode, isWifiMode, setWifiMode, peers, addPeer, addWifiPeer } = useChatStore();
+    const { currentUser, isOfflineMode, setOfflineMode, isWifiMode, setWifiMode, peers, addPeer, addWifiPeer, joinGlobalChannel } = useChatStore();
+
+    useEffect(() => {
+        joinGlobalChannel();
+    }, [joinGlobalChannel]);
 
     useEffect(() => {
         if (isOfflineMode && currentUser) {
