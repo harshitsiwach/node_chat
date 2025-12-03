@@ -10,6 +10,26 @@ export interface Message {
     type: 'text' | 'image' | 'audio';
     mediaUrl?: string;
     isMesh?: boolean;
+    // QoL Features
+    reactions?: Record<string, string[]>; // emoji -> wallet addresses
+    replyTo?: string; // ID of the message being replied to
+    isPinned?: boolean;
+    poll?: PollData;
+}
+
+export interface PollOption {
+    id: number;
+    text: string;
+    votes: number;
+    voters: string[]; // wallet addresses
+}
+
+export interface PollData {
+    id: string;
+    question: string;
+    options: PollOption[];
+    createdAt: number;
+    endsAt: number;
 }
 
 export interface Peer {
@@ -35,6 +55,12 @@ export interface Chat {
     status: 'online' | 'offline' | 'idle';
     lastMessage?: string;
     lastMessageTime?: string;
+    metadata?: {
+        nftContract?: string;
+        tokenId?: string;
+        ownerWallet?: string;
+        groupKey?: string; // Encrypted or Decrypted key
+    };
 }
 
 import type { MeshPeer } from '../services/mesh/types';
@@ -42,6 +68,7 @@ import type { WifiPeer } from '../services/wifi/types';
 
 interface ChatState {
     currentUser: User | null;
+    messagingKeyPair: CryptoKeyPair | null; // Added
     activeChat: string | null;
     mobileView: 'list' | 'chat';
     isOfflineMode: boolean;
@@ -52,6 +79,7 @@ interface ChatState {
     wifiPeers: WifiPeer[];
 
     setCurrentUser: (user: User | null) => void;
+    setMessagingKeyPair: (keyPair: CryptoKeyPair | null) => void; // Added
     updateUserName: (name: string) => void;
     setActiveChat: (chatId: string) => void;
     setMobileView: (view: 'list' | 'chat') => void;
@@ -63,7 +91,11 @@ interface ChatState {
     setMessages: (chatId: string, messages: Message[]) => void;
     updatePeerStatus: (peerId: string, status: Peer['status']) => void;
     createDirectChat: (participant: string) => void;
-    createGroupChat: (name: string, addresses: string[]) => void;
+    createGroupChat: (name: string, addresses: string[], metadata?: Chat['metadata']) => void;
+    // QoL Actions
+    addReaction: (chatId: string, messageId: string, emoji: string, walletAddress: string) => void;
+    pinMessage: (chatId: string, messageId: string, isPinned: boolean) => void;
+    votePoll: (chatId: string, messageId: string, optionId: number, walletAddress: string) => void;
 }
 
 export const useChatStore = create<ChatState>((set, get) => ({
@@ -98,8 +130,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
     },
     peers: [],
     wifiPeers: [],
+    messagingKeyPair: null, // Initial state
 
     setCurrentUser: (user) => set({ currentUser: user }),
+    setMessagingKeyPair: (keyPair) => set({ messagingKeyPair: keyPair }), // Action
     updateUserName: (name) => set((state) => ({
         currentUser: state.currentUser ? { ...state.currentUser, name } : null
     })),
@@ -157,7 +191,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
             activeChat: newChat.id
         }));
     },
-    createGroupChat: (name, addresses) => {
+    createGroupChat: (name, addresses, metadata) => {
         const id = `group_${Date.now()}`;
         const newChat: Chat = {
             id,
@@ -166,11 +200,97 @@ export const useChatStore = create<ChatState>((set, get) => ({
             participants: addresses,
             unreadCount: 0,
             status: 'online',
+            metadata
         };
         set(state => ({
             chats: [...state.chats, newChat],
             messages: { ...state.messages, [id]: [] },
             activeChat: id
         }));
-    }
+
+    },
+    addReaction: (chatId, messageId, emoji, walletAddress) => set((state) => {
+        const chatMessages = state.messages[chatId] || [];
+        const updatedMessages = chatMessages.map(msg => {
+            if (msg.id === messageId) {
+                const currentReactions = msg.reactions || {};
+                const currentReactors = currentReactions[emoji] || [];
+
+                // Toggle reaction
+                let newReactors;
+                if (currentReactors.includes(walletAddress)) {
+                    newReactors = currentReactors.filter(w => w !== walletAddress);
+                } else {
+                    newReactors = [...currentReactors, walletAddress];
+                }
+
+                return {
+                    ...msg,
+                    reactions: {
+                        ...currentReactions,
+                        [emoji]: newReactors
+                    }
+                };
+            }
+            return msg;
+        });
+        return {
+            messages: {
+                ...state.messages,
+                [chatId]: updatedMessages
+            }
+        };
+    }),
+    pinMessage: (chatId, messageId, isPinned) => set((state) => {
+        const chatMessages = state.messages[chatId] || [];
+        const updatedMessages = chatMessages.map(msg =>
+            msg.id === messageId ? { ...msg, isPinned } : msg
+        );
+        return {
+            messages: {
+                ...state.messages,
+                [chatId]: updatedMessages
+            }
+        };
+    }),
+    votePoll: (chatId, messageId, optionId, walletAddress) => set((state) => {
+        const chatMessages = state.messages[chatId] || [];
+        const updatedMessages = chatMessages.map(msg => {
+            if (msg.id === messageId && msg.poll) {
+                // Remove previous vote if any (single vote per poll for simplicity)
+                const newOptions = msg.poll.options.map(opt => {
+                    const hasVoted = opt.voters.includes(walletAddress);
+                    if (opt.id === optionId) {
+                        // Toggle vote
+                        return hasVoted
+                            ? { ...opt, votes: opt.votes - 1, voters: opt.voters.filter(v => v !== walletAddress) }
+                            : { ...opt, votes: opt.votes + 1, voters: [...opt.voters, walletAddress] };
+                    } else {
+                        // Remove vote from other options if we want single-choice
+                        // For now, let's allow multi-choice or just handle the target option
+                        // Let's enforce single choice for this implementation
+                        if (hasVoted) {
+                            return { ...opt, votes: opt.votes - 1, voters: opt.voters.filter(v => v !== walletAddress) };
+                        }
+                        return opt;
+                    }
+                });
+
+                return {
+                    ...msg,
+                    poll: {
+                        ...msg.poll,
+                        options: newOptions
+                    }
+                };
+            }
+            return msg;
+        });
+        return {
+            messages: {
+                ...state.messages,
+                [chatId]: updatedMessages
+            }
+        };
+    })
 }));

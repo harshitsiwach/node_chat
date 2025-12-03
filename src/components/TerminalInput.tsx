@@ -1,5 +1,9 @@
 import React, { useState, useRef } from 'react';
 import { Image, Mic, Square, Send } from 'lucide-react';
+import { CommandParser } from '../services/commands/CommandParser';
+import { CommandHandler } from '../services/commands/CommandHandler';
+import { useChatStore } from '../store/useChatStore';
+import { useNotificationStore } from '../store/useNotificationStore';
 
 interface TerminalInputProps {
   onSendMessage: (message: string, type: 'text' | 'image' | 'audio', mediaUrl?: string) => void;
@@ -16,10 +20,37 @@ export const TerminalInput = ({ onSendMessage }: TerminalInputProps) => {
   const chunksRef = useRef<Blob[]>([]);
   const timerRef = useRef<number | null>(null);
 
+  const { activeChat, currentUser, addMessage } = useChatStore();
+  const { addNotification } = useNotificationStore();
+
+  const handleSend = async () => {
+    if (!input.trim()) return;
+
+    // Check for command
+    const command = CommandParser.parse(input);
+    if (command && activeChat && currentUser) {
+      const handled = await CommandHandler.handle(
+        command,
+        activeChat,
+        currentUser.address,
+        addMessage,
+        addNotification
+      );
+
+      if (handled) {
+        setInput('');
+        return;
+      }
+    }
+
+    // Normal message
+    onSendMessage(input, 'text');
+    setInput('');
+  };
+
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && input.trim()) {
-      onSendMessage(input, 'text');
-      setInput('');
+      handleSend();
     }
   };
 
@@ -126,7 +157,7 @@ export const TerminalInput = ({ onSendMessage }: TerminalInputProps) => {
           onBlur={() => setIsFocused(false)}
           className="flex-1 bg-transparent border-none outline-none text-cyber-yellow placeholder-gray-600"
           autoFocus
-          placeholder="Enter command..."
+          placeholder="Enter command (#poll, #send)..."
         />
       )}
 
@@ -137,11 +168,8 @@ export const TerminalInput = ({ onSendMessage }: TerminalInputProps) => {
       <button
         onClick={(e) => {
           e.stopPropagation();
-          if (input.trim()) {
-            onSendMessage(input, 'text');
-            setInput('');
-            inputRef.current?.focus();
-          }
+          handleSend();
+          inputRef.current?.focus();
         }}
         disabled={!input.trim()}
         className={`p-1 ml-2 transition-colors ${input.trim() ? 'text-cyber-yellow hover:text-white' : 'text-gray-700 cursor-not-allowed'}`}

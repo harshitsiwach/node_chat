@@ -7,9 +7,11 @@ import { useChatStore } from '../store/useChatStore';
 import { meshService } from '../services/mesh/MeshService';
 import { wifiService } from '../services/wifi/WifiService';
 import { storageService } from '../services/storage';
+import { mockRelayService, type RelayMessage } from '../services/relay/MockRelayService';
+import { KeyManager } from '../services/crypto/KeyManager';
 
 export const ActiveChat = () => {
-    const { activeChat, messages, addMessage, setMessages, setMobileView, isOfflineMode, isWifiMode, currentUser } = useChatStore();
+    const { activeChat, messages, addMessage, setMessages, setMobileView, isOfflineMode, isWifiMode, currentUser, messagingKeyPair, chats } = useChatStore();
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const currentMessages = activeChat ? (messages[activeChat] || []) : [];
 
@@ -85,7 +87,7 @@ export const ActiveChat = () => {
             status: 'sent' as const,
             type,
             mediaUrl,
-            isMesh: isOfflineMode
+            isMesh: isOfflineMode // This will be true for mesh, false for wifi/relay
         };
 
         addMessage(activeChat, newMessage);
@@ -96,7 +98,50 @@ export const ActiveChat = () => {
         } else if (isWifiMode) {
             await wifiService.sendMessage(text, currentUser.id, currentUser.name);
         } else {
-            // Normal online sending logic (stubbed)
+            // Secure Relay Mode
+            const chat = chats.find(c => c.id === activeChat);
+            if (!chat) return;
+
+            // 1. Determine Recipient (for DM)
+            // For simplicity, assuming DM has 1 other participant
+            const recipientAddress = chat.participants.find(p => p !== currentUser.address);
+
+            if (recipientAddress && messagingKeyPair) {
+                try {
+                    // 2. Fetch Recipient's Public Key
+                    const recipientPubKeyBase64 = await mockRelayService.getUserPublicKey(recipientAddress);
+
+                    if (recipientPubKeyBase64) {
+                        // 3. Import Keys & Derive Shared Secret
+                        const recipientPubKey = await KeyManager.importPublicKey(recipientPubKeyBase64);
+                        const sharedKey = await KeyManager.deriveSharedKey(messagingKeyPair.privateKey, recipientPubKey);
+
+                        // 4. Encrypt Message
+                        const { ciphertext, iv } = await KeyManager.encrypt(sharedKey, text);
+
+                        // 5. Send to Relay
+                        const relayMsg: RelayMessage = {
+                            id: Date.now().toString(),
+                            conversationId: activeChat,
+                            senderWallet: currentUser.address,
+                            ciphertext,
+                            iv,
+                            timestamp: new Date().toISOString()
+                        };
+                        await mockRelayService.sendMessage(relayMsg);
+
+                        // 6. Add to Local Store (Plaintext)
+                        // This was already done above with `newMessage`, but if we want to specifically mark it as relay, we could modify `newMessage` or add a new one.
+                        // For now, the `newMessage` already added to local store is sufficient for display.
+                        // The `isMesh` property in `newMessage` will be false for relay messages, which is correct.
+                    } else {
+                        console.warn("Recipient public key not found");
+                        // Fallback or error
+                    }
+                } catch (e) {
+                    console.error("Encryption failed:", e);
+                }
+            }
         }
     };
 
@@ -154,12 +199,18 @@ export const ActiveChat = () => {
                 {currentMessages.map((msg) => (
                     <MessageBubble
                         key={msg.id}
+                        id={msg.id}
                         text={msg.text}
                         isSent={msg.isSent}
                         timestamp={msg.timestamp}
                         sender={msg.sender}
                         type={msg.type}
                         mediaUrl={msg.mediaUrl}
+                        reactions={msg.reactions}
+                        replyTo={msg.replyTo}
+                        isPinned={msg.isPinned}
+                        poll={msg.poll}
+                        chatId={activeChat}
                     />
                 ))}
                 <div ref={messagesEndRef} />

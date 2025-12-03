@@ -1,8 +1,9 @@
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, UserPlus, Users, ArrowRight } from 'lucide-react';
+import { X, UserPlus, Users, ArrowRight, LogIn } from 'lucide-react';
 import { useChatStore } from '../store/useChatStore';
 import { useNotificationStore } from '../store/useNotificationStore';
+import { mockRelayService } from '../services/relay/MockRelayService';
 
 interface CreateChatModalProps {
     isOpen: boolean;
@@ -10,15 +11,17 @@ interface CreateChatModalProps {
 }
 
 export const CreateChatModal = ({ isOpen, onClose }: CreateChatModalProps) => {
-    const [mode, setMode] = useState<'direct' | 'group'>('direct');
+    const [mode, setMode] = useState<'direct' | 'create_group' | 'join_group'>('direct');
     const [address, setAddress] = useState('');
     const [groupName, setGroupName] = useState('');
-    const [groupMembers, setGroupMembers] = useState('');
+    const [nftContract, setNftContract] = useState('');
+    const [tokenId, setTokenId] = useState('');
+    const [groupIdToJoin, setGroupIdToJoin] = useState('');
 
-    const { createDirectChat, createGroupChat } = useChatStore();
+    const { createDirectChat, createGroupChat, currentUser } = useChatStore();
     const { addNotification } = useNotificationStore();
 
-    const handleSubmit = (e: React.FormEvent) => {
+    const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
 
         if (mode === 'direct') {
@@ -28,25 +31,78 @@ export const CreateChatModal = ({ isOpen, onClose }: CreateChatModalProps) => {
             }
             createDirectChat(address);
             addNotification('success', `Started chat with ${address.slice(0, 6)}...`);
-        } else {
+            onClose();
+        } else if (mode === 'create_group') {
             if (!groupName.trim()) {
                 addNotification('error', 'Group name is required');
                 return;
             }
-            const members = groupMembers.split(',').map(m => m.trim()).filter(Boolean);
-            if (members.length === 0) {
-                addNotification('error', 'At least one member address is required');
+            if (!nftContract.trim()) {
+                addNotification('error', 'NFT Contract Address is required');
                 return;
             }
-            createGroupChat(groupName, members);
-            addNotification('success', `Created group "${groupName}"`);
+
+            try {
+                // Create on Relay
+                await mockRelayService.createGroup(
+                    groupName,
+                    currentUser?.address || '',
+                    nftContract,
+                    tokenId || undefined
+                );
+
+                // Create Locally
+                createGroupChat(groupName, [currentUser?.address || ''], {
+                    nftContract,
+                    tokenId,
+                    ownerWallet: currentUser?.address,
+                    groupKey: 'simulated_key' // In real app, this comes from relay
+                });
+
+                addNotification('success', `Created NFT-gated group "${groupName}"`);
+                onClose();
+            } catch (error) {
+                console.error("Group creation failed", error);
+                addNotification('error', 'Failed to create group');
+            }
+        } else if (mode === 'join_group') {
+            if (!groupIdToJoin.trim()) {
+                addNotification('error', 'Group ID is required');
+                return;
+            }
+
+            try {
+                const result = await mockRelayService.joinGroup(groupIdToJoin, currentUser?.address || '');
+                if (result.success) {
+                    // Fetch group details (mock)
+                    const groups = await mockRelayService.getGroups();
+                    const group = groups.find(g => g.id === groupIdToJoin);
+
+                    if (group) {
+                        createGroupChat(group.name, group.members, {
+                            nftContract: group.nftContract,
+                            tokenId: group.tokenId,
+                            ownerWallet: group.ownerWallet,
+                            groupKey: result.groupKey
+                        });
+                        addNotification('success', `Joined group "${group.name}"`);
+                        onClose();
+                    }
+                } else {
+                    addNotification('error', result.error || 'Failed to join group');
+                }
+            } catch (error) {
+                console.error("Join failed", error);
+                addNotification('error', 'Failed to join group');
+            }
         }
 
-        // Reset and close
+        // Reset fields
         setAddress('');
         setGroupName('');
-        setGroupMembers('');
-        onClose();
+        setNftContract('');
+        setTokenId('');
+        setGroupIdToJoin('');
     };
 
     return (
@@ -72,35 +128,47 @@ export const CreateChatModal = ({ isOpen, onClose }: CreateChatModalProps) => {
                             </button>
                         </div>
 
-                        <div className="flex gap-4 mb-6">
+                        <div className="flex gap-2 mb-6 overflow-x-auto">
                             <button
                                 onClick={() => setMode('direct')}
-                                className={`flex-1 py-2 font-mono text-sm border transition-colors ${mode === 'direct'
-                                        ? 'bg-cyber-yellow text-cyber-black border-cyber-yellow'
-                                        : 'text-gray-400 border-gray-700 hover:border-cyber-yellow'
+                                className={`flex-1 py-2 px-2 font-mono text-[10px] border transition-colors whitespace-nowrap ${mode === 'direct'
+                                    ? 'bg-cyber-yellow text-cyber-black border-cyber-yellow'
+                                    : 'text-gray-400 border-gray-700 hover:border-cyber-yellow'
                                     }`}
                             >
-                                <div className="flex items-center justify-center gap-2">
-                                    <UserPlus className="w-4 h-4" />
+                                <div className="flex items-center justify-center gap-1">
+                                    <UserPlus className="w-3 h-3" />
                                     DIRECT
                                 </div>
                             </button>
                             <button
-                                onClick={() => setMode('group')}
-                                className={`flex-1 py-2 font-mono text-sm border transition-colors ${mode === 'group'
-                                        ? 'bg-cyber-yellow text-cyber-black border-cyber-yellow'
-                                        : 'text-gray-400 border-gray-700 hover:border-cyber-yellow'
+                                onClick={() => setMode('create_group')}
+                                className={`flex-1 py-2 px-2 font-mono text-[10px] border transition-colors whitespace-nowrap ${mode === 'create_group'
+                                    ? 'bg-cyber-yellow text-cyber-black border-cyber-yellow'
+                                    : 'text-gray-400 border-gray-700 hover:border-cyber-yellow'
                                     }`}
                             >
-                                <div className="flex items-center justify-center gap-2">
-                                    <Users className="w-4 h-4" />
-                                    GROUP
+                                <div className="flex items-center justify-center gap-1">
+                                    <Users className="w-3 h-3" />
+                                    CREATE GROUP
+                                </div>
+                            </button>
+                            <button
+                                onClick={() => setMode('join_group')}
+                                className={`flex-1 py-2 px-2 font-mono text-[10px] border transition-colors whitespace-nowrap ${mode === 'join_group'
+                                    ? 'bg-cyber-yellow text-cyber-black border-cyber-yellow'
+                                    : 'text-gray-400 border-gray-700 hover:border-cyber-yellow'
+                                    }`}
+                            >
+                                <div className="flex items-center justify-center gap-1">
+                                    <LogIn className="w-3 h-3" />
+                                    JOIN GROUP
                                 </div>
                             </button>
                         </div>
 
                         <form onSubmit={handleSubmit} className="space-y-4">
-                            {mode === 'direct' ? (
+                            {mode === 'direct' && (
                                 <div>
                                     <label className="block text-xs font-mono text-cyber-yellow mb-2">TARGET_ADDRESS</label>
                                     <input
@@ -112,10 +180,12 @@ export const CreateChatModal = ({ isOpen, onClose }: CreateChatModalProps) => {
                                         autoFocus
                                     />
                                 </div>
-                            ) : (
+                            )}
+
+                            {mode === 'create_group' && (
                                 <>
                                     <div>
-                                        <label className="block text-xs font-mono text-cyber-yellow mb-2">GROUP_ID</label>
+                                        <label className="block text-xs font-mono text-cyber-yellow mb-2">GROUP_NAME</label>
                                         <input
                                             type="text"
                                             value={groupName}
@@ -126,23 +196,47 @@ export const CreateChatModal = ({ isOpen, onClose }: CreateChatModalProps) => {
                                         />
                                     </div>
                                     <div>
-                                        <label className="block text-xs font-mono text-cyber-yellow mb-2">PARTICIPANTS (Comma separated)</label>
+                                        <label className="block text-xs font-mono text-cyber-yellow mb-2">NFT_CONTRACT (BASE SEPOLIA)</label>
                                         <input
                                             type="text"
-                                            value={groupMembers}
-                                            onChange={(e) => setGroupMembers(e.target.value)}
-                                            placeholder="0x123..., 0xabc..."
+                                            value={nftContract}
+                                            onChange={(e) => setNftContract(e.target.value)}
+                                            placeholder="0x..."
+                                            className="w-full bg-black/50 border border-gray-700 text-white p-3 font-mono text-sm focus:border-cyber-yellow focus:outline-none"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-mono text-cyber-yellow mb-2">TOKEN_ID (OPTIONAL)</label>
+                                        <input
+                                            type="text"
+                                            value={tokenId}
+                                            onChange={(e) => setTokenId(e.target.value)}
+                                            placeholder="For ERC-1155"
                                             className="w-full bg-black/50 border border-gray-700 text-white p-3 font-mono text-sm focus:border-cyber-yellow focus:outline-none"
                                         />
                                     </div>
                                 </>
                             )}
 
+                            {mode === 'join_group' && (
+                                <div>
+                                    <label className="block text-xs font-mono text-cyber-yellow mb-2">GROUP_ID</label>
+                                    <input
+                                        type="text"
+                                        value={groupIdToJoin}
+                                        onChange={(e) => setGroupIdToJoin(e.target.value)}
+                                        placeholder="group_..."
+                                        className="w-full bg-black/50 border border-gray-700 text-white p-3 font-mono text-sm focus:border-cyber-yellow focus:outline-none"
+                                        autoFocus
+                                    />
+                                </div>
+                            )}
+
                             <button
                                 type="submit"
                                 className="w-full bg-cyber-gray border border-cyber-yellow text-cyber-yellow py-3 font-mono text-sm hover:bg-cyber-yellow hover:text-cyber-black transition-all flex items-center justify-center gap-2 group"
                             >
-                                ESTABLISH_LINK
+                                {mode === 'join_group' ? 'VERIFY_AND_JOIN' : 'ESTABLISH_LINK'}
                                 <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
                             </button>
                         </form>

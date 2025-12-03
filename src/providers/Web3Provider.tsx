@@ -1,11 +1,11 @@
 import React from 'react';
 import { createConfig, http, WagmiProvider } from 'wagmi';
-import { mainnet, sepolia } from 'wagmi/chains';
+import { mainnet, sepolia, baseSepolia } from 'wagmi/chains';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { injected, mock } from 'wagmi/connectors';
 
 const config = createConfig({
-    chains: [mainnet, sepolia],
+    chains: [mainnet, sepolia, baseSepolia],
     connectors: [
         injected(),
         mock({
@@ -15,6 +15,7 @@ const config = createConfig({
     transports: {
         [mainnet.id]: http(),
         [sepolia.id]: http(),
+        [baseSepolia.id]: http(),
     },
 });
 

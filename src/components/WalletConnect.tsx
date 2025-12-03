@@ -1,16 +1,65 @@
-import { useAccount, useConnect } from 'wagmi';
-import { useState } from 'react';
+import { useAccount, useConnect, useSignMessage } from 'wagmi';
+import { useState, useEffect } from 'react';
 import { Shield, Terminal, Globe } from 'lucide-react';
 import { generatePrivateKey, privateKeyToAccount } from 'viem/accounts';
 import { useChatStore } from '../store/useChatStore';
 import { GuestKeyModal } from './GuestKeyModal';
+import { KeyManager } from '../services/crypto/KeyManager';
+import { mockRelayService } from '../services/relay/MockRelayService';
 
 export const WalletConnect = () => {
-    const { isConnected } = useAccount();
+    const { address, isConnected } = useAccount();
     const { connectors, connect } = useConnect();
-    const { currentUser, setCurrentUser } = useChatStore();
+    const { signMessageAsync } = useSignMessage();
+    const { currentUser, setCurrentUser, setMessagingKeyPair } = useChatStore();
     const [showGuestModal, setShowGuestModal] = useState(false);
     const [guestCreds, setGuestCreds] = useState<{ address: string; privateKey: string } | null>(null);
+    const [isAuthenticating, setIsAuthenticating] = useState(false);
+
+    // Handle Wallet Connection & Key Generation
+    useEffect(() => {
+        const initializeKeys = async () => {
+            if (isConnected && address && !currentUser && !isAuthenticating) {
+                setIsAuthenticating(true);
+                try {
+                    // 1. Request Signature
+                    // We request a signature to prove identity, but for this demo we don't strictly use it 
+                    // to derive the key (using random instead for simplicity). 
+                    // In a real app, we'd use PBKDF2 on this signature.
+                    await signMessageAsync({
+                        message: `Login to NODE Chat\nWallet: ${address}\nTimestamp: ${Date.now()}`,
+                    });
+
+                    // 2. Derive Wrapping Key (Simulated "Login")
+                    // In a real app, we'd try to unwrap an existing key from local storage first.
+                    // For this demo, we'll just generate a fresh identity keypair for the session.
+                    // Or we could store it in localStorage encrypted. Let's do fresh for simplicity/security demo.
+
+                    const keyPair = await KeyManager.generateIdentityKeyPair();
+                    const publicKeyBase64 = await KeyManager.exportPublicKey(keyPair.publicKey);
+
+                    // 3. Register with Relay
+                    await mockRelayService.registerUser(address, publicKeyBase64);
+
+                    // 4. Update Store
+                    setMessagingKeyPair(keyPair);
+                    setCurrentUser({
+                        id: address,
+                        name: `User_${address.slice(0, 4)}`,
+                        address: address
+                    });
+
+                } catch (error) {
+                    console.error("Auth failed:", error);
+                    // Disconnect or show error
+                } finally {
+                    setIsAuthenticating(false);
+                }
+            }
+        };
+
+        initializeKeys();
+    }, [isConnected, address, currentUser, signMessageAsync, setCurrentUser, setMessagingKeyPair, isAuthenticating]);
 
     const handleGuestLogin = () => {
         const privateKey = generatePrivateKey();
@@ -19,8 +68,15 @@ export const WalletConnect = () => {
         setShowGuestModal(true);
     };
 
-    const confirmGuestLogin = () => {
+    const confirmGuestLogin = async () => {
         if (guestCreds) {
+            // For guests, we also generate a messaging keypair
+            const keyPair = await KeyManager.generateIdentityKeyPair();
+            const publicKeyBase64 = await KeyManager.exportPublicKey(keyPair.publicKey);
+
+            await mockRelayService.registerUser(guestCreds.address, publicKeyBase64);
+            setMessagingKeyPair(keyPair);
+
             setCurrentUser({
                 id: guestCreds.address,
                 name: `Guest_${guestCreds.address.slice(0, 4)}`,
