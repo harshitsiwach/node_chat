@@ -37,6 +37,7 @@ class MockRelayService {
     private groups: Map<string, GroupMetadata> = new Map(); // groupId -> Group Metadata
     private channel: BroadcastChannel;
     private readonly GLOBAL_CHANNEL_ID = 'global_public_channel';
+    private messageListeners: ((msg: RelayMessage) => void)[] = [];
 
     constructor() {
         this.channel = new BroadcastChannel('mock_relay_channel');
@@ -44,6 +45,13 @@ class MockRelayService {
 
         // Initialize Global Channel
         this.initializeGlobalChannel();
+    }
+
+    onMessage(callback: (msg: RelayMessage) => void) {
+        this.messageListeners.push(callback);
+        return () => {
+            this.messageListeners = this.messageListeners.filter(l => l !== callback);
+        };
     }
 
     private initializeGlobalChannel() {
@@ -78,6 +86,9 @@ class MockRelayService {
                 if (!msgs.find(m => m.id === message.id)) {
                     msgs.push(message);
                     this.messages.set(message.conversationId, msgs);
+
+                    // Notify listeners (UI)
+                    this.messageListeners.forEach(listener => listener(message));
                 }
                 break;
             case 'CREATE_GROUP':
