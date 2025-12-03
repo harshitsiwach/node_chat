@@ -1,4 +1,4 @@
-import { useState } from 'react';
+// import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { Terminal, Shield, Globe, Bluetooth, Wifi } from 'lucide-react';
 
@@ -7,7 +7,7 @@ interface WelcomeModalProps {
 }
 
 export const WelcomeModal = ({ onClose }: WelcomeModalProps) => {
-    const [step, setStep] = useState(0);
+    // Removed step state to show all info at once
 
     const steps = [
         {
@@ -37,17 +37,6 @@ export const WelcomeModal = ({ onClose }: WelcomeModalProps) => {
         }
     ];
 
-    const handleNext = () => {
-        if (step < steps.length - 1) {
-            setStep(step + 1);
-        } else {
-            onClose();
-        }
-    };
-
-    // The useEffect for auto-advancing steps is removed as per the instruction's implied change
-    // and the introduction of handleNext for manual progression.
-
     return (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/90 backdrop-blur-md">
             <motion.div
@@ -73,14 +62,15 @@ export const WelcomeModal = ({ onClose }: WelcomeModalProps) => {
                         <motion.div
                             key={i}
                             initial={{ opacity: 0, x: -20 }}
-                            animate={{ opacity: step >= i ? 1 : 0.3, x: 0 }}
+                            animate={{ opacity: 1, x: 0 }}
+                            transition={{ delay: i * 0.1 }} // Staggered animation for effect
                             className="flex items-center gap-4"
                         >
-                            <div className={`p-2 border ${step >= i ? 'border-cyber-yellow text-cyber-yellow' : 'border-gray-800 text-gray-800'}`}>
+                            <div className="p-2 border border-cyber-yellow text-cyber-yellow">
                                 <s.icon className="w-6 h-6" />
                             </div>
                             <div>
-                                <h3 className={`font-mono text-sm font-bold ${step >= i ? 'text-white' : 'text-gray-600'}`}>
+                                <h3 className="font-mono text-sm font-bold text-white">
                                     {s.title}
                                 </h3>
                                 <p className="text-xs text-gray-500 font-mono">{s.desc}</p>
@@ -90,11 +80,11 @@ export const WelcomeModal = ({ onClose }: WelcomeModalProps) => {
                 </div>
 
                 <button
-                    onClick={handleNext}
+                    onClick={onClose}
                     className="w-full px-6 py-2 font-mono font-bold transition-colors
                         bg-cyber-yellow text-black hover:bg-white"
                 >
-                    {step < steps.length - 1 ? 'START' : 'ENTER_SYSTEM >'}
+                    ENTER_SYSTEM &gt;
                 </button>
             </motion.div>
         </div>
