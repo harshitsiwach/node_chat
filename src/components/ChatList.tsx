@@ -2,7 +2,16 @@ import { Hash, Users, Activity } from 'lucide-react';
 import { useChatStore } from '../store/useChatStore';
 
 export const ChatList = () => {
-    const { chats, activeChat, setActiveChat } = useChatStore();
+    const { chats, activeChat, setActiveChat, onlineUsers, currentUser } = useChatStore();
+
+    const isOnline = (chat: any) => {
+        if (chat.type === 'group') return true; // Groups always "online" for now
+        if (chat.type === 'direct') {
+            const otherParticipant = chat.participants.find((p: string) => p !== currentUser?.address);
+            return otherParticipant && onlineUsers.includes(otherParticipant);
+        }
+        return false;
+    };
 
     return (
         <div className="w-full md:w-64 border-r border-cyber-gray bg-cyber-black/95 flex flex-col z-10 h-full">
@@ -28,8 +37,8 @@ export const ChatList = () => {
                                 {chat.type === 'group' ? <Users className="w-3 h-3" /> : <Hash className="w-3 h-3" />}
                                 {chat.name}
                             </span>
-                            {chat.status === 'online' && (
-                                <span className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse shadow-[0_0_5px_#22c55e]"></span>
+                            {isOnline(chat) && (
+                                <span className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse shadow-[0_0_5px_#22c55e]" title="Online"></span>
                             )}
                         </div>
                         <div className="flex justify-between items-center opacity-60">

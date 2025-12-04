@@ -100,14 +100,20 @@ class SupabaseRelayService {
         if (error) console.error('[Supabase] Create Conversation Error:', error);
     }
 
-    async getMessages(conversationId: string): Promise<SupabaseMessage[]> {
+    async getMessages(conversationId: string, afterTimestamp?: string): Promise<SupabaseMessage[]> {
         if (!this.supabase) return [];
 
-        const { data, error } = await this.supabase
+        let query = this.supabase
             .from('messages')
             .select('*')
             .eq('conversation_id', conversationId)
             .order('created_at', { ascending: true });
+
+        if (afterTimestamp) {
+            query = query.gt('created_at', afterTimestamp);
+        }
+
+        const { data, error } = await query;
 
         if (error) {
             console.error('[Supabase] Get Messages Error:', error);
@@ -132,6 +138,43 @@ class SupabaseRelayService {
 
         return () => {
             this.supabase?.removeChannel(channel);
+        };
+    }
+
+    // Presence (Online Status)
+    trackPresence(walletAddress: string, onSync: (onlineUsers: string[]) => void) {
+        if (!this.supabase) return () => { };
+
+        const channel = this.supabase.channel('online-users', {
+            config: {
+                presence: {
+                    key: walletAddress,
+                },
+            },
+        });
+
+        channel
+            .on('presence', { event: 'sync' }, () => {
+                const newState = channel.presenceState();
+                const onlineUsers = Object.keys(newState);
+                onSync(onlineUsers);
+            })
+            .on('presence', { event: 'join' }, () => {
+                // Optional: Notify user joined
+            })
+            .on('presence', { event: 'leave' }, () => {
+                // Optional: Notify user left
+            })
+            .subscribe(async (status) => {
+                if (status === 'SUBSCRIBED') {
+                    await channel.track({
+                        online_at: new Date().toISOString(),
+                    });
+                }
+            });
+
+        return () => {
+            channel.unsubscribe();
         };
     }
 }

@@ -9,13 +9,29 @@ import { wifiService } from '../services/wifi/WifiService';
 import { storageService } from '../services/storage';
 import { mockRelayService, type RelayMessage } from '../services/relay/MockRelayService';
 import { KeyManager } from '../services/crypto/KeyManager';
-import { globalChatService, type P2PMessage } from '../services/p2p/GlobalChatService';
+import { globalChatService } from '../services/p2p/GlobalChatService';
 import { supabaseRelayService, type SupabaseMessage } from '../services/relay/SupabaseRelayService';
+import { GroupSettingsModal } from './GroupSettingsModal';
+import { Settings } from 'lucide-react';
+import { useState } from 'react';
 
 export const ActiveChat = () => {
     const { activeChat, messages, addMessage, setMessages, setMobileView, isOfflineMode, isWifiMode, currentUser, messagingKeyPair, chats } = useChatStore();
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const currentMessages = activeChat ? (messages[activeChat] || []) : [];
+    const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+    const [currentGroup, setCurrentGroup] = useState<any>(null);
+
+    useEffect(() => {
+        const fetchGroup = async () => {
+            if (activeChat) {
+                const groups = await mockRelayService.getGroups();
+                const group = groups.find(g => g.id === activeChat);
+                setCurrentGroup(group);
+            }
+        };
+        fetchGroup();
+    }, [activeChat]);
 
     const scrollToBottom = () => {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -37,12 +53,18 @@ export const ActiveChat = () => {
         loadMessages();
     }, [activeChat, setMessages]);
 
+    // Helper to persist and add message
+    const handleIncomingMessage = async (chatId: string, msg: any) => {
+        addMessage(chatId, msg);
+        await storageService.saveMessage(chatId, msg);
+    };
+
     // Listen for incoming mesh messages
     useEffect(() => {
         if (isOfflineMode) {
             meshService.onMessage((msg) => {
                 if (activeChat) {
-                    addMessage(activeChat, {
+                    handleIncomingMessage(activeChat, {
                         id: msg.id,
                         text: msg.text,
                         isSent: false,
@@ -55,14 +77,14 @@ export const ActiveChat = () => {
                 }
             });
         }
-    }, [isOfflineMode, activeChat, addMessage]);
+    }, [isOfflineMode, activeChat, handleIncomingMessage]);
 
     // Listen for incoming wifi messages
     useEffect(() => {
         if (isWifiMode) {
             wifiService.onMessage((msg) => {
                 if (activeChat) {
-                    addMessage(activeChat, {
+                    handleIncomingMessage(activeChat, {
                         id: msg.id,
                         text: msg.text,
                         isSent: false,
@@ -75,7 +97,7 @@ export const ActiveChat = () => {
                 }
             });
         }
-    }, [isWifiMode, activeChat, addMessage]);
+    }, [isWifiMode, activeChat, handleIncomingMessage]);
 
     // Connect to Global Chat P2P on mount
     useEffect(() => {
@@ -83,7 +105,7 @@ export const ActiveChat = () => {
 
         const unsubscribe = globalChatService.onMessage((msg) => {
             if (activeChat === 'global_public_channel') {
-                addMessage('global_public_channel', {
+                handleIncomingMessage('global_public_channel', {
                     id: msg.id,
                     text: msg.text,
                     isSent: false,
@@ -101,7 +123,7 @@ export const ActiveChat = () => {
             unsubscribe();
             // Optional: globalChatService.disconnect(); // Keep connected for background?
         };
-    }, [activeChat, addMessage]);
+    }, [activeChat, handleIncomingMessage]);
 
     // Listen for incoming Relay messages (DM only now, Global is P2P)
     useEffect(() => {
@@ -109,7 +131,7 @@ export const ActiveChat = () => {
             const unsubscribe = mockRelayService.onMessage(async (relayMsg) => {
                 if (relayMsg.conversationId === 'global_public_channel') return;
 
-                addMessage(relayMsg.conversationId, {
+                handleIncomingMessage(relayMsg.conversationId, {
                     id: relayMsg.id,
                     text: relayMsg.ciphertext,
                     isSent: false,
@@ -122,7 +144,7 @@ export const ActiveChat = () => {
             });
             return () => unsubscribe();
         }
-    }, [isOfflineMode, isWifiMode, addMessage, currentUser]);
+    }, [isOfflineMode, isWifiMode, handleIncomingMessage, currentUser]);
 
     // Listen for incoming Supabase messages (DMs)
     useEffect(() => {
@@ -133,25 +155,29 @@ export const ActiveChat = () => {
 
                     let text = "[Encrypted Message]";
                     // Decrypt logic
-                    const chat = chats.find(c => c.id === activeChat);
-                    const recipientAddress = chat?.participants.find(p => p !== currentUser?.address);
+                    if (activeChat === 'global_public_channel') {
+                        text = msg.ciphertext;
+                    } else {
+                        const chat = chats.find(c => c.id === activeChat);
+                        const recipientAddress = chat?.participants.find(p => p !== currentUser?.address);
 
-                    if (recipientAddress && messagingKeyPair) {
-                        if (msg.sender_wallet === recipientAddress) {
-                            const senderPubKeyBase64 = await supabaseRelayService.getUserPublicKey(msg.sender_wallet);
-                            if (senderPubKeyBase64) {
-                                const senderPubKey = await KeyManager.importPublicKey(senderPubKeyBase64);
-                                const sharedKey = await KeyManager.deriveSharedKey(messagingKeyPair.privateKey, senderPubKey);
-                                try {
-                                    text = await KeyManager.decrypt(sharedKey, msg.ciphertext, msg.iv);
-                                } catch (e) {
-                                    console.error("Decryption failed", e);
+                        if (recipientAddress && messagingKeyPair) {
+                            if (msg.sender_wallet === recipientAddress) {
+                                const senderPubKeyBase64 = await supabaseRelayService.getUserPublicKey(msg.sender_wallet);
+                                if (senderPubKeyBase64) {
+                                    const senderPubKey = await KeyManager.importPublicKey(senderPubKeyBase64);
+                                    const sharedKey = await KeyManager.deriveSharedKey(messagingKeyPair.privateKey, senderPubKey);
+                                    try {
+                                        text = await KeyManager.decrypt(sharedKey, msg.ciphertext, msg.iv);
+                                    } catch (e) {
+                                        console.error("Decryption failed", e);
+                                    }
                                 }
                             }
                         }
                     }
 
-                    addMessage(activeChat, {
+                    handleIncomingMessage(activeChat, {
                         id: msg.id,
                         text: text,
                         isSent: false,
@@ -165,74 +191,121 @@ export const ActiveChat = () => {
             });
             return () => unsubscribe();
         }
-    }, [isOfflineMode, isWifiMode, activeChat, currentUser, messagingKeyPair, chats, addMessage]);
+    }, [isOfflineMode, isWifiMode, activeChat, currentUser, messagingKeyPair, chats, handleIncomingMessage]);
 
-    // Load History from Supabase on chat switch
+    // Load History from Supabase on chat switch (Smart Sync)
     useEffect(() => {
         const loadHistory = async () => {
-            if (activeChat && !isOfflineMode && !isWifiMode && activeChat !== 'global_public_channel') {
+            if (activeChat && !isOfflineMode && !isWifiMode) {
                 if (supabaseRelayService.isConfigured()) {
+                    // 1. Get latest local message timestamp
+                    const localMessages = await storageService.getMessages(activeChat);
+                    // let lastTimestamp = null; // Unused for now
+                    if (localMessages && localMessages.length > 0) {
+                        // Assuming messages are sorted or we find the max
+                        // Timestamps are stored as locale strings in store, but we need ISO for comparison?
+                        // Wait, storageService saves the `Message` object. 
+                        // The `timestamp` in `Message` is `toLocaleTimeString`. We lost the ISO date!
+                        // We need to fix storage to save ISO or use `id` if it's sortable (it is Date.now()).
+                        // `id` is string, but derived from Date.now().
+
+                        // Let's use the ID to find the latest one, assuming ID ~ timestamp.
+                        // Or better, we rely on the fact that we only want *new* messages.
+                        // But Supabase `created_at` is real time.
+
+                        // Workaround: We'll fetch all for now but filter locally? No, that defeats the purpose.
+                        // We need to store the `createdAt` ISO in the message object for sync purposes.
+                        // Since we don't have it in the current `Message` interface, we'll fetch all but ONLY process new ones.
+                        // OPTIMIZATION V2: Add `isoTimestamp` to Message interface.
+
+                        // For now, let's just optimize the DECRYPTION loop.
+                        // We will check if ID exists in `localMessages` before decrypting.
+                    }
+
+                    // Fetch from Supabase (fetching all for now as we lack ISO timestamp in store)
+                    // TODO: Add ISO timestamp to store for true incremental fetch
                     const history = await supabaseRelayService.getMessages(activeChat);
 
-                    // Process history
-                    for (const msg of history) {
+                    const newMessages: any[] = [];
+                    const promises = history.map(async (msg) => {
+                        // Skip if we already have this message ID
+                        if (localMessages?.some(m => m.id === msg.id)) return;
+
                         let text = "[Encrypted Message]";
-                        if (msg.sender_wallet === currentUser?.address) {
-                            // We sent it, we might not be able to decrypt it if we didn't store it locally or if we don't have the key derived for self (usually we encrypt for recipient)
-                            // Actually, in this simple scheme, we encrypt for the shared secret. 
-                            // So we CAN decrypt our own messages if we have the shared secret.
-                            // BUT, we need to know who the OTHER participant is to derive the shared secret.
-                            const chat = chats.find(c => c.id === activeChat);
-                            const otherAddress = chat?.participants.find(p => p !== currentUser?.address);
-                            if (otherAddress && messagingKeyPair) {
-                                const otherPubKeyBase64 = await supabaseRelayService.getUserPublicKey(otherAddress);
-                                if (otherPubKeyBase64) {
-                                    const otherPubKey = await KeyManager.importPublicKey(otherPubKeyBase64);
-                                    const sharedKey = await KeyManager.deriveSharedKey(messagingKeyPair.privateKey, otherPubKey);
-                                    try {
-                                        text = await KeyManager.decrypt(sharedKey, msg.ciphertext, msg.iv);
-                                    } catch (e) { console.error("History decryption failed", e); }
-                                }
-                            }
+                        let isDecrypted = false;
+
+                        // Decrypt
+                        if (activeChat === 'global_public_channel') {
+                            // Global chat is plaintext in Supabase for now (or we could use a shared key, but let's assume plaintext for public)
+                            // Actually, SupabaseRelayService expects ciphertext. 
+                            // For Global, we can store plaintext as "ciphertext" or use a known public key.
+                            // Let's assume we store it as plaintext in ciphertext field for Global, OR we use a fixed key.
+                            // Simpler: Just treat ciphertext as text for Global.
+                            text = msg.ciphertext;
+                            isDecrypted = true;
                         } else {
-                            // Received message
-                            const chat = chats.find(c => c.id === activeChat);
-                            const senderAddress = chat?.participants.find(p => p !== currentUser?.address);
-                            if (senderAddress && messagingKeyPair && msg.sender_wallet === senderAddress) {
-                                const senderPubKeyBase64 = await supabaseRelayService.getUserPublicKey(senderAddress);
-                                if (senderPubKeyBase64) {
-                                    const senderPubKey = await KeyManager.importPublicKey(senderPubKeyBase64);
-                                    const sharedKey = await KeyManager.deriveSharedKey(messagingKeyPair.privateKey, senderPubKey);
-                                    try {
-                                        text = await KeyManager.decrypt(sharedKey, msg.ciphertext, msg.iv);
-                                    } catch (e) { console.error("History decryption failed", e); }
+                            if (msg.sender_wallet === currentUser?.address) {
+                                // Sent by us
+                                const chat = chats.find(c => c.id === activeChat);
+                                const otherAddress = chat?.participants.find(p => p !== currentUser?.address);
+                                if (otherAddress && messagingKeyPair) {
+                                    const otherPubKeyBase64 = await supabaseRelayService.getUserPublicKey(otherAddress);
+                                    if (otherPubKeyBase64) {
+                                        const otherPubKey = await KeyManager.importPublicKey(otherPubKeyBase64);
+                                        const sharedKey = await KeyManager.deriveSharedKey(messagingKeyPair.privateKey, otherPubKey);
+                                        try {
+                                            text = await KeyManager.decrypt(sharedKey, msg.ciphertext, msg.iv);
+                                            isDecrypted = true;
+                                        } catch (e) { console.error("History decryption failed", e); }
+                                    }
+                                }
+                            } else {
+                                // Received
+                                const chat = chats.find(c => c.id === activeChat);
+                                const senderAddress = chat?.participants.find(p => p !== currentUser?.address);
+                                if (senderAddress && messagingKeyPair && msg.sender_wallet === senderAddress) {
+                                    const senderPubKeyBase64 = await supabaseRelayService.getUserPublicKey(senderAddress);
+                                    if (senderPubKeyBase64) {
+                                        const senderPubKey = await KeyManager.importPublicKey(senderPubKeyBase64);
+                                        const sharedKey = await KeyManager.deriveSharedKey(messagingKeyPair.privateKey, senderPubKey);
+                                        try {
+                                            text = await KeyManager.decrypt(sharedKey, msg.ciphertext, msg.iv);
+                                            isDecrypted = true;
+                                        } catch (e) { console.error("History decryption failed", e); }
+                                    }
                                 }
                             }
                         }
 
-                        // Check if already exists to avoid dupes (simple check)
-                        // In real app, store handles this or we check IDs
-                        // For now, we'll just add it. Store `addMessage` appends. 
-                        // We should probably check if `messages[activeChat]` already has it.
-                        // But `addMessage` in store doesn't check dupes efficiently. 
-                        // Let's assume `setMessages` clears or we just append new ones.
-                        // Actually, `loadMessages` from local storage runs first. 
-                        // We should merge. For this demo, let's just append and rely on React keys or user ignoring dupes.
-                        // Better: check if ID exists in current messages
+                        if (isDecrypted || msg.sender_wallet === currentUser?.address) {
+                            newMessages.push({
+                                id: msg.id,
+                                text: text,
+                                isSent: msg.sender_wallet === currentUser?.address,
+                                timestamp: new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+                                sender: msg.sender_wallet === currentUser?.address ? 'YOU' : msg.sender_wallet.slice(0, 6),
+                                status: 'read',
+                                type: 'text',
+                                isMesh: false
+                            });
+                        }
+                    });
 
-                        // const exists = messages[activeChat]?.some(m => m.id === msg.id);
-                        // if (!exists) {
-                        addMessage(activeChat, {
-                            id: msg.id,
-                            text: text,
-                            isSent: msg.sender_wallet === currentUser?.address,
-                            timestamp: new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-                            sender: msg.sender_wallet === currentUser?.address ? 'YOU' : msg.sender_wallet.slice(0, 6),
-                            status: 'read',
-                            type: 'text',
-                            isMesh: false
-                        });
-                        // }
+                    await Promise.all(promises);
+
+                    if (newMessages.length > 0) {
+                        // Sort by ID/Timestamp
+                        newMessages.sort((a, b) => Number(a.id) - Number(b.id));
+
+                        // Batch add to store and storage
+                        // Note: addMessage doesn't support batch, so we loop. 
+                        // But at least we did the heavy decryption in parallel and skipped existing ones.
+                        for (const m of newMessages) {
+                            // Use handleIncomingMessage? No, that's for single.
+                            // We can just call saveMessage directly here as we did before.
+                            addMessage(activeChat, m);
+                            await storageService.saveMessage(activeChat, m);
+                        }
                     }
                 }
             }
@@ -243,6 +316,30 @@ export const ActiveChat = () => {
 
     const handleSendMessage = async (text: string, type: 'text' | 'image' | 'audio' = 'text', mediaUrl?: string) => {
         if (!activeChat || !currentUser) return;
+
+        // Check for fees (x402)
+        if (currentGroup?.fees && currentGroup.ownerWallet !== currentUser.address) {
+            let fee = 0;
+            if (type === 'text') {
+                // Check if it contains a link
+                const hasLink = /https?:\/\/[^\s]+/.test(text);
+                if (hasLink) fee = currentGroup.fees.link || 0;
+                else fee = currentGroup.fees.message || 0;
+            } else {
+                fee = currentGroup.fees.media || 0;
+            }
+
+            if (fee > 0) {
+                const confirmPayment = window.confirm(`PAYMENT REQUIRED (x402)\n\nThis action requires a fee of ${fee} ETH.\nRecipient: ${currentGroup.fees.recipientAddress}\n\nProceed with payment?`);
+                if (!confirmPayment) return;
+
+                // Simulate payment delay
+                // In real app, trigger wallet transaction here
+                console.log(`[x402] Processing payment of ${fee} ETH...`);
+                await new Promise(r => setTimeout(r, 1000));
+                console.log(`[x402] Payment successful!`);
+            }
+        }
 
         const newMessage = {
             id: Date.now().toString(),
@@ -264,17 +361,11 @@ export const ActiveChat = () => {
         } else if (isWifiMode) {
             await wifiService.sendMessage(text, currentUser.id, currentUser.name);
         } else {
-            // Global Channel -> P2P
+            // Global Channel -> Supabase (Persistent)
             if (activeChat === 'global_public_channel') {
-                const p2pMsg: P2PMessage = {
-                    id: newMessage.id,
-                    text: text,
-                    sender: currentUser.name || currentUser.address.slice(0, 6),
-                    timestamp: Date.now(),
-                    type: type,
-                    mediaUrl: mediaUrl
-                };
-                globalChatService.sendMessage(p2pMsg);
+                // For Global, we send plaintext as "ciphertext" for now, or use a fixed IV
+                // To keep it compatible with the schema, we pass empty IV or dummy
+                await supabaseRelayService.sendMessage(activeChat, currentUser.address, text, 'public_iv');
                 return;
             }
 
@@ -365,9 +456,21 @@ export const ActiveChat = () => {
                         </span>
                     </div>
                 </div>
-                <div className="flex items-center text-xs text-cyber-amber">
-                    <Lock className="w-3 h-3 mr-1" />
-                    ENCRYPTED
+                <div className="flex items-center gap-4">
+                    {/* Admin Settings Button */}
+                    {currentGroup?.ownerWallet === currentUser?.address && (
+                        <button
+                            onClick={() => setIsSettingsOpen(true)}
+                            className="text-cyber-gray hover:text-cyber-yellow transition-colors"
+                            title="Group Settings"
+                        >
+                            <Settings className="w-4 h-4" />
+                        </button>
+                    )}
+                    <div className="flex items-center text-xs text-cyber-amber">
+                        <Lock className="w-3 h-3 mr-1" />
+                        ENCRYPTED
+                    </div>
                 </div>
             </div>
 
@@ -397,6 +500,15 @@ export const ActiveChat = () => {
             <div className="h-16 border-t border-cyber-yellow p-4 bg-cyber-black z-10">
                 <TerminalInput onSendMessage={handleSendMessage} />
             </div>
+
+            {/* Settings Modal */}
+            <GroupSettingsModal
+                isOpen={isSettingsOpen}
+                onClose={() => setIsSettingsOpen(false)}
+                groupId={activeChat}
+                currentFees={currentGroup?.fees}
+                isAdmin={currentGroup?.ownerWallet === currentUser?.address}
+            />
         </div>
     );
 };

@@ -6,6 +6,7 @@ import { useChatStore } from '../store/useChatStore';
 import { GuestKeyModal } from './GuestKeyModal';
 import { KeyManager } from '../services/crypto/KeyManager';
 import { mockRelayService } from '../services/relay/MockRelayService';
+import { supabaseRelayService } from '../services/relay/SupabaseRelayService';
 
 export const WalletConnect = () => {
     const { address, isConnected } = useAccount();
@@ -38,8 +39,9 @@ export const WalletConnect = () => {
                     const keyPair = await KeyManager.generateIdentityKeyPair();
                     const publicKeyBase64 = await KeyManager.exportPublicKey(keyPair.publicKey);
 
-                    // 3. Register with Relay
+                    // 3. Register with Relay (Supabase & Mock)
                     await mockRelayService.registerUser(address, publicKeyBase64);
+                    await supabaseRelayService.registerUser(address, publicKeyBase64);
 
                     // 4. Update Store
                     setMessagingKeyPair(keyPair);
@@ -75,6 +77,7 @@ export const WalletConnect = () => {
             const publicKeyBase64 = await KeyManager.exportPublicKey(keyPair.publicKey);
 
             await mockRelayService.registerUser(guestCreds.address, publicKeyBase64);
+            await supabaseRelayService.registerUser(guestCreds.address, publicKeyBase64);
             setMessagingKeyPair(keyPair);
 
             setCurrentUser({

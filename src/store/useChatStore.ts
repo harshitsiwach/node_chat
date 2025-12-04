@@ -97,6 +97,10 @@ interface ChatState {
     pinMessage: (chatId: string, messageId: string, isPinned: boolean) => void;
     votePoll: (chatId: string, messageId: string, optionId: number, walletAddress: string) => void;
     joinGlobalChannel: () => void;
+
+    // Presence
+    onlineUsers: string[];
+    setOnlineUsers: (users: string[]) => void;
 }
 
 export const useChatStore = create<ChatState>((set, get) => ({
@@ -315,5 +319,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
             chats: [globalChat, ...state.chats],
             messages: { ...state.messages, [GLOBAL_ID]: [] }
         }));
-    }
+    },
+
+    onlineUsers: [],
+    setOnlineUsers: (users) => set({ onlineUsers: users })
 }));

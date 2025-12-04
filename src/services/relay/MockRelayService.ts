@@ -27,6 +27,12 @@ export interface GroupMetadata {
     maxSupply?: number;
     currentSupply?: number;
     mintPrice?: string; // e.g. "0.01 ETH"
+    fees?: {
+        message: number;
+        media: number;
+        link: number;
+        recipientAddress: string;
+    };
     // In real app, we'd store encrypted key PER MEMBER.
     // For mock, we'll just store the key and "pretend" we re-encrypt it for each member fetch.
 }
@@ -101,6 +107,9 @@ class MockRelayService {
                     group.members.push(walletAddress);
                     this.groups.set(groupId, group);
                 }
+                break;
+            case 'UPDATE_GROUP':
+                this.groups.set(data.payload.id, data.payload);
                 break;
             case 'DEPLOY_CONTRACT':
                 // No state to sync for deployment itself, but maybe useful for logs
@@ -265,6 +274,22 @@ class MockRelayService {
 
         group.pinnedMessageIds = group.pinnedMessageIds.filter(id => id !== messageId);
         this.groups.set(groupId, group);
+        return true;
+    }
+
+    async updateGroupSettings(groupId: string, fees: GroupMetadata['fees']): Promise<boolean> {
+        const group = this.groups.get(groupId);
+        if (!group) return false;
+
+        group.fees = fees;
+        this.groups.set(groupId, group);
+
+        this.channel.postMessage({
+            type: 'UPDATE_GROUP',
+            payload: group
+        });
+
+        console.log(`[Relay] Updated settings for group ${groupId}`, fees);
         return true;
     }
 

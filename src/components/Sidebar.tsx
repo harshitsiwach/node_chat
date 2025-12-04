@@ -6,12 +6,25 @@ import { RadarView } from './RadarView';
 import { useChatStore } from '../store/useChatStore';
 import { meshService } from '../services/mesh/MeshService';
 import { wifiService } from '../services/wifi/WifiService';
+import { supabaseRelayService } from '../services/relay/SupabaseRelayService';
 
 export const Sidebar = () => {
     const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
     const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
     const [isRadarOpen, setIsRadarOpen] = useState(false);
-    const { currentUser, isOfflineMode, setOfflineMode, isWifiMode, setWifiMode, peers, addPeer, addWifiPeer, joinGlobalChannel } = useChatStore();
+    const { currentUser, isOfflineMode, setOfflineMode, isWifiMode, setWifiMode, peers, addPeer, addWifiPeer, joinGlobalChannel, setOnlineUsers } = useChatStore();
+
+    // Initialize Supabase Presence
+    useEffect(() => {
+        if (currentUser && !isOfflineMode && !isWifiMode) {
+            const unsubscribe = supabaseRelayService.trackPresence(currentUser.address, (users) => {
+                setOnlineUsers(users);
+            });
+            return () => {
+                unsubscribe();
+            };
+        }
+    }, [currentUser, isOfflineMode, isWifiMode, setOnlineUsers]);
 
     useEffect(() => {
         joinGlobalChannel();
