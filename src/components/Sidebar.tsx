@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Settings, Plus, Bluetooth, Wifi, Radar } from 'lucide-react';
+import { Settings, Plus, Bluetooth, Wifi, Radar, ShoppingCart, Gamepad2, MessageSquare } from 'lucide-react';
 import { CreateChatModal } from './CreateChatModal';
 import { SettingsModal } from './SettingsModal';
 import { RadarView } from './RadarView';
@@ -8,7 +8,12 @@ import { meshService } from '../services/mesh/MeshService';
 import { wifiService } from '../services/wifi/WifiService';
 import { supabaseRelayService } from '../services/relay/SupabaseRelayService';
 
-export const Sidebar = () => {
+interface SidebarProps {
+    activeTab: 'chat' | 'marketplace' | 'games';
+    onTabChange: (tab: 'chat' | 'marketplace' | 'games') => void;
+}
+
+export const Sidebar = ({ activeTab, onTabChange }: SidebarProps) => {
     const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
     const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
     const [isRadarOpen, setIsRadarOpen] = useState(false);
@@ -76,6 +81,30 @@ export const Sidebar = () => {
                     title="New Chat"
                 >
                     <Plus className="w-5 h-5 group-hover:rotate-90 transition-transform" />
+                </button>
+
+                <button
+                    onClick={() => onTabChange('chat')}
+                    className={`w-10 h-10 rounded-full flex items-center justify-center transition-all duration-300 group ${activeTab === 'chat' ? 'bg-cyber-yellow text-black' : 'bg-gray-800 text-cyber-yellow hover:bg-cyber-yellow hover:text-black'}`}
+                    title="Chats"
+                >
+                    <MessageSquare className="w-5 h-5" />
+                </button>
+
+                <button
+                    onClick={() => onTabChange('marketplace')}
+                    className={`w-10 h-10 rounded-full flex items-center justify-center transition-all duration-300 group ${activeTab === 'marketplace' ? 'bg-cyber-yellow text-black' : 'bg-gray-800 text-cyber-yellow hover:bg-cyber-yellow hover:text-black'}`}
+                    title="NFT Marketplace"
+                >
+                    <ShoppingCart className="w-5 h-5" />
+                </button>
+
+                <button
+                    onClick={() => onTabChange('games')}
+                    className={`w-10 h-10 rounded-full flex items-center justify-center transition-all duration-300 group ${activeTab === 'games' ? 'bg-cyber-yellow text-black' : 'bg-gray-800 text-cyber-yellow hover:bg-cyber-yellow hover:text-black'}`}
+                    title="Arcade"
+                >
+                    <Gamepad2 className="w-5 h-5" />
                 </button>
 
                 <button

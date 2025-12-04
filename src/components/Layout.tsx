@@ -13,6 +13,11 @@ import { User as UserIcon } from 'lucide-react';
 
 import { NetworkModal } from './NetworkModal';
 import { RadarView } from './RadarView';
+import { GlobalMessageListener } from './GlobalMessageListener';
+import { MarketplaceView } from './MarketplaceView';
+import { GamesView } from './GamesView';
+import { GameModal } from './GameModal';
+import { useGameStore } from '../store/useGameStore';
 
 export const Layout = () => {
     const [showWelcome, setShowWelcome] = useState(false);
@@ -21,7 +26,9 @@ export const Layout = () => {
     const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
     const [isNetworkModalOpen, setIsNetworkModalOpen] = useState(false);
     const [isRadarOpen, setIsRadarOpen] = useState(false);
+    const [activeTab, setActiveTab] = useState<'chat' | 'marketplace' | 'games'>('chat');
     const { mobileView, currentUser } = useChatStore();
+    const { activeGame } = useGameStore();
 
     useEffect(() => {
         const hasSeenWelcome = localStorage.getItem('hasSeenWelcome');
@@ -41,6 +48,7 @@ export const Layout = () => {
             <div className="absolute inset-0 pointer-events-none z-50 bg-scanline opacity-10 mix-blend-overlay"></div>
 
             <NotificationToast />
+            <GlobalMessageListener />
 
             {showWelcome && <WelcomeModal onClose={handleCloseWelcome} />}
 
@@ -56,18 +64,33 @@ export const Layout = () => {
 
             {/* Desktop Navigation */}
             <div className="hidden md:flex w-full h-full">
-                <Sidebar />
-                <ChatList />
-                <ActiveChat />
+                <Sidebar
+                    activeTab={activeTab}
+                    onTabChange={setActiveTab}
+                />
+
+                <div className="flex-1 relative flex overflow-hidden">
+                    {activeTab === 'chat' && (
+                        <>
+                            <ChatList />
+                            <ActiveChat />
+                        </>
+                    )}
+                    {activeTab === 'marketplace' && <MarketplaceView onClose={() => setActiveTab('chat')} />}
+                    {activeTab === 'games' && <GamesView onClose={() => setActiveTab('chat')} />}
+                </div>
             </div>
 
             {/* Mobile Navigation */}
             <div className="md:hidden flex flex-col w-full h-full pb-16">
-                {mobileView === 'list' ? (
-                    <ChatList />
+                {activeTab === 'chat' ? (
+                    mobileView === 'list' ? <ChatList /> : <ActiveChat />
+                ) : activeTab === 'marketplace' ? (
+                    <MarketplaceView onClose={() => setActiveTab('chat')} />
                 ) : (
-                    <ActiveChat />
+                    <GamesView onClose={() => setActiveTab('chat')} />
                 )}
+
                 <MobileNavBar
                     onNewChat={() => setIsCreateModalOpen(true)}
                     onSettings={() => setIsSettingsModalOpen(true)}
@@ -94,6 +117,7 @@ export const Layout = () => {
                 onOpenRadar={() => setIsRadarOpen(true)}
             />
             {isRadarOpen && <RadarView onClose={() => setIsRadarOpen(false)} />}
+            {activeGame && <GameModal />}
         </div>
     );
 };

@@ -18,6 +18,7 @@ export const CreateChatModal = ({ isOpen, onClose }: CreateChatModalProps) => {
 
     // Group Wizard State
     const [wizardStep, setWizardStep] = useState<'details' | 'deploying' | 'success'>('details');
+    const [groupType, setGroupType] = useState<'standard' | 'nft'>('standard');
     const [groupName, setGroupName] = useState('');
     const [maxSupply, setMaxSupply] = useState('100');
     const [deployedContract, setDeployedContract] = useState('');
@@ -51,6 +52,23 @@ export const CreateChatModal = ({ isOpen, onClose }: CreateChatModalProps) => {
         }
         createDirectChat(address);
         addNotification('success', `Started chat with ${address.slice(0, 6)}...`);
+        handleClose();
+    };
+
+    const handleCreateStandardGroup = () => {
+        if (!groupName.trim()) {
+            addNotification('error', 'Group name is required');
+            return;
+        }
+
+        if (!currentUser) return;
+
+        createGroupChat(groupName, [currentUser.address], {
+            ownerWallet: currentUser.address,
+            groupKey: 'standard_key'
+        });
+
+        addNotification('success', `Group "${groupName}" created!`);
         handleClose();
     };
 
@@ -234,19 +252,37 @@ export const CreateChatModal = ({ isOpen, onClose }: CreateChatModalProps) => {
                         {/* Create Group Wizard */}
                         {mode === 'create_group' && (
                             <div className="space-y-4">
-                                {wizardStep === 'details' && (
-                                    <>
-                                        <div>
-                                            <label className="block text-xs font-mono text-cyber-yellow mb-2">GROUP_NAME</label>
-                                            <input
-                                                type="text"
-                                                value={groupName}
-                                                onChange={(e) => setGroupName(e.target.value)}
-                                                placeholder="Enter group name"
-                                                className="w-full bg-black/50 border border-gray-700 text-white p-3 font-mono text-sm focus:border-cyber-yellow focus:outline-none"
-                                                autoFocus
-                                            />
-                                        </div>
+                                <>
+                                    <div className="flex gap-2 mb-4 bg-gray-900 p-1 rounded">
+                                        <button
+                                            type="button"
+                                            onClick={() => setGroupType('standard')}
+                                            className={`flex-1 py-1 text-xs font-mono rounded transition-colors ${groupType === 'standard' ? 'bg-cyber-yellow text-black font-bold' : 'text-gray-400 hover:text-white'}`}
+                                        >
+                                            STANDARD
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => setGroupType('nft')}
+                                            className={`flex-1 py-1 text-xs font-mono rounded transition-colors ${groupType === 'nft' ? 'bg-cyber-yellow text-black font-bold' : 'text-gray-400 hover:text-white'}`}
+                                        >
+                                            NFT_GATED
+                                        </button>
+                                    </div>
+
+                                    <div>
+                                        <label className="block text-xs font-mono text-cyber-yellow mb-2">GROUP_NAME</label>
+                                        <input
+                                            type="text"
+                                            value={groupName}
+                                            onChange={(e) => setGroupName(e.target.value)}
+                                            placeholder="Enter group name"
+                                            className="w-full bg-black/50 border border-gray-700 text-white p-3 font-mono text-sm focus:border-cyber-yellow focus:outline-none"
+                                            autoFocus
+                                        />
+                                    </div>
+
+                                    {groupType === 'nft' && (
                                         <div>
                                             <label className="block text-xs font-mono text-cyber-yellow mb-2">MAX_PARTICIPANTS (SUPPLY)</label>
                                             <input
@@ -257,15 +293,17 @@ export const CreateChatModal = ({ isOpen, onClose }: CreateChatModalProps) => {
                                                 className="w-full bg-black/50 border border-gray-700 text-white p-3 font-mono text-sm focus:border-cyber-yellow focus:outline-none"
                                             />
                                         </div>
-                                        <button
-                                            onClick={handleDeployGroup}
-                                            className="w-full bg-cyber-gray border border-cyber-yellow text-cyber-yellow py-3 font-mono text-sm hover:bg-cyber-yellow hover:text-cyber-black transition-all flex items-center justify-center gap-2 group"
-                                        >
-                                            DEPLOY_CONTRACT
-                                            <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
-                                        </button>
-                                    </>
-                                )}
+                                    )}
+
+                                    <button
+                                        onClick={groupType === 'nft' ? handleDeployGroup : handleCreateStandardGroup}
+                                        className="w-full bg-cyber-gray border border-cyber-yellow text-cyber-yellow py-3 font-mono text-sm hover:bg-cyber-yellow hover:text-cyber-black transition-all flex items-center justify-center gap-2 group"
+                                    >
+                                        {groupType === 'nft' ? 'DEPLOY_CONTRACT' : 'CREATE_GROUP'}
+                                        <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+                                    </button>
+                                </>
+
 
                                 {wizardStep === 'deploying' && (
                                     <div className="flex flex-col items-center justify-center py-8">

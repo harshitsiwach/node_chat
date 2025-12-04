@@ -15,6 +15,46 @@ export interface Message {
     replyTo?: string; // ID of the message being replied to
     isPinned?: boolean;
     poll?: PollData;
+    game?: GameData;
+    market?: PredictionMarketData;
+    trade?: TradeData;
+}
+
+export interface TradeData {
+    id: string;
+    tokenSymbol: string;
+    amount: number;
+    status: 'pending' | 'completed' | 'failed';
+    from: string; // wallet address
+    txHash?: string;
+}
+
+export interface PredictionMarketData {
+    id: string;
+    question: string;
+    options: MarketOption[];
+    endTime: number; // timestamp
+    totalVolume: number; // ETH amount
+    status: 'open' | 'resolved';
+    creator: string; // wallet address
+    winner?: string; // optionId
+}
+
+export interface MarketOption {
+    id: string;
+    text: string;
+    pool: number; // Amount bet on this option
+    holders: Record<string, number>; // wallet -> amount
+}
+
+export interface GameData {
+    type: 'coinflip' | 'dice';
+    stake: string; // e.g. "0.1"
+    token: string; // e.g. "ETH"
+    status: 'open' | 'accepted' | 'resolved';
+    players: string[]; // wallet addresses
+    winner?: string;
+    result?: string; // e.g. "Heads" or "6"
 }
 
 export interface PollOption {
@@ -101,6 +141,14 @@ interface ChatState {
     // Presence
     onlineUsers: string[];
     setOnlineUsers: (users: string[]) => void;
+
+    // Global Message Handling
+    receiveMessage: (chatId: string, message: Message) => void;
+    resetUnread: (chatId: string) => void;
+    joinGame: (chatId: string, messageId: string, walletAddress: string) => void;
+    buyMarketOption: (chatId: string, messageId: string, optionId: string, amount: number, walletAddress: string) => void;
+    resolveMarket: (chatId: string, messageId: string, winningOptionId: string) => void;
+    executeTrade: (chatId: string, messageId: string) => void;
 }
 
 export const useChatStore = create<ChatState>((set, get) => ({
@@ -322,5 +370,176 @@ export const useChatStore = create<ChatState>((set, get) => ({
     },
 
     onlineUsers: [],
-    setOnlineUsers: (users) => set({ onlineUsers: users })
+    setOnlineUsers: (users) => set({ onlineUsers: users }),
+
+    receiveMessage: (chatId, message) => set((state) => {
+        // 1. Add Message
+        const currentMessages = state.messages[chatId] || [];
+        // Avoid duplicates
+        if (currentMessages.some(m => m.id === message.id)) return state;
+
+        const updatedMessages = [...currentMessages, message];
+
+        // 2. Update Chat (Last Message & Unread)
+        const updatedChats = state.chats.map(chat => {
+            if (chat.id === chatId) {
+                const isUnread = state.activeChat !== chatId;
+                return {
+                    ...chat,
+                    lastMessage: message.type === 'image' ? '📷 Image' : message.type === 'audio' ? '🎵 Audio' : message.text,
+                    lastMessageTime: message.timestamp,
+                    unreadCount: isUnread ? chat.unreadCount + 1 : 0
+                };
+            }
+            return chat;
+        });
+
+        // 3. Handle New Chat (if it doesn't exist in list but we received a message)
+        // This usually happens if we just created it via createDirectChat, but if not:
+        const chatExists = state.chats.some(c => c.id === chatId);
+        if (!chatExists) {
+            // If it's a DM, we might need to create it. 
+            // But we need more info (name, etc) which usually comes from the caller.
+            // For now, assume caller creates chat first if needed.
+        }
+
+        return {
+            messages: {
+                ...state.messages,
+                [chatId]: updatedMessages
+            },
+            chats: updatedChats
+        };
+    }),
+
+    resetUnread: (chatId) => set((state) => ({
+        chats: state.chats.map(c => c.id === chatId ? { ...c, unreadCount: 0 } : c)
+    })),
+
+    joinGame: (chatId, messageId, walletAddress) => set((state) => {
+        const chatMessages = state.messages[chatId] || [];
+        const updatedMessages = chatMessages.map(msg => {
+            if (msg.id === messageId && msg.game && msg.game.status === 'open') {
+                // Prevent self-play
+                if (msg.game.players.includes(walletAddress)) return msg;
+
+                // Resolve Game
+                const players = [...msg.game.players, walletAddress];
+                const challengerPick = msg.game.result; // 'heads' or 'tails'
+
+                // Flip the coin
+                const flipResult = Math.random() < 0.5 ? 'heads' : 'tails';
+                const winner = flipResult === challengerPick ? players[0] : players[1];
+
+                return {
+                    ...msg,
+                    text: `🎲 Coin Flip Resolved! Result: ${flipResult.toUpperCase()}. Winner: ${winner.slice(0, 6)}...`,
+                    game: {
+                        ...msg.game,
+                        status: 'resolved' as const,
+                        players,
+                        winner,
+                        result: flipResult
+                    }
+                };
+            }
+            return msg;
+        });
+
+        return {
+            messages: {
+                ...state.messages,
+                [chatId]: updatedMessages
+            }
+        };
+    }),
+
+    buyMarketOption: (chatId, messageId, optionId, amount, walletAddress) => set((state) => {
+        const chatMessages = state.messages[chatId] || [];
+        const updatedMessages = chatMessages.map(msg => {
+            if (msg.id === messageId && msg.market && msg.market.status === 'open') {
+                const updatedOptions = msg.market.options.map(opt => {
+                    if (opt.id === optionId) {
+                        const currentHoldings = opt.holders[walletAddress] || 0;
+                        return {
+                            ...opt,
+                            pool: opt.pool + amount,
+                            holders: {
+                                ...opt.holders,
+                                [walletAddress]: currentHoldings + amount
+                            }
+                        };
+                    }
+                    return opt;
+                });
+
+                return {
+                    ...msg,
+                    market: {
+                        ...msg.market,
+                        options: updatedOptions,
+                        totalVolume: msg.market.totalVolume + amount
+                    }
+                };
+            }
+            return msg;
+        });
+
+        return {
+            messages: {
+                ...state.messages,
+                [chatId]: updatedMessages
+            }
+        };
+    }),
+
+    resolveMarket: (chatId, messageId, winningOptionId) => set((state) => {
+        const chatMessages = state.messages[chatId] || [];
+        const updatedMessages = chatMessages.map(msg => {
+            if (msg.id === messageId && msg.market && msg.market.status === 'open') {
+                return {
+                    ...msg,
+                    text: `🔮 Market Resolved! Winner: ${msg.market.options.find(o => o.id === winningOptionId)?.text}`,
+                    market: {
+                        ...msg.market,
+                        status: 'resolved' as const,
+                        winner: winningOptionId
+                    }
+                };
+            }
+            return msg;
+        });
+
+        return {
+            messages: {
+                ...state.messages,
+                [chatId]: updatedMessages
+            }
+        };
+    }),
+
+    executeTrade: (chatId, messageId) => set((state) => {
+        const chatMessages = state.messages[chatId] || [];
+        const updatedMessages = chatMessages.map(msg => {
+            if (msg.id === messageId && msg.trade && msg.trade.status === 'pending') {
+                return {
+                    ...msg,
+                    text: `✅ Trade Executed: Bought ${msg.trade.amount} ${msg.trade.tokenSymbol}`,
+                    trade: {
+                        ...msg.trade,
+                        status: 'completed' as const,
+                        txHash: '0x' + Math.random().toString(16).slice(2)
+                    }
+                };
+            }
+            return msg;
+        });
+
+        return {
+            messages: {
+                ...state.messages,
+                [chatId]: updatedMessages
+            }
+        };
+    })
 }));

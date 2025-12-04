@@ -6,7 +6,7 @@ export interface Command {
 
 export class CommandParser {
     static parse(text: string): Command | null {
-        if (!text.startsWith('#')) return null;
+        if (!text.startsWith('#') && !text.startsWith('/')) return null;
 
         // Remove the leading #
         const cleanText = text.slice(1);

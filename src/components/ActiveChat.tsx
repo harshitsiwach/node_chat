@@ -10,13 +10,13 @@ import { storageService } from '../services/storage';
 import { mockRelayService, type RelayMessage } from '../services/relay/MockRelayService';
 import { KeyManager } from '../services/crypto/KeyManager';
 import { globalChatService } from '../services/p2p/GlobalChatService';
-import { supabaseRelayService, type SupabaseMessage } from '../services/relay/SupabaseRelayService';
+import { supabaseRelayService } from '../services/relay/SupabaseRelayService';
 import { GroupSettingsModal } from './GroupSettingsModal';
 import { Settings } from 'lucide-react';
 import { useState } from 'react';
 
 export const ActiveChat = () => {
-    const { activeChat, messages, addMessage, setMessages, setMobileView, isOfflineMode, isWifiMode, currentUser, messagingKeyPair, chats } = useChatStore();
+    const { activeChat, messages, addMessage, setMessages, setMobileView, isOfflineMode, isWifiMode, currentUser, messagingKeyPair, chats, resetUnread } = useChatStore();
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const currentMessages = activeChat ? (messages[activeChat] || []) : [];
     const [isSettingsOpen, setIsSettingsOpen] = useState(false);
@@ -28,10 +28,13 @@ export const ActiveChat = () => {
                 const groups = await mockRelayService.getGroups();
                 const group = groups.find(g => g.id === activeChat);
                 setCurrentGroup(group);
+
+                // Reset unread count
+                resetUnread(activeChat);
             }
         };
         fetchGroup();
-    }, [activeChat]);
+    }, [activeChat, resetUnread]);
 
     const scrollToBottom = () => {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -147,51 +150,8 @@ export const ActiveChat = () => {
     }, [isOfflineMode, isWifiMode, handleIncomingMessage, currentUser]);
 
     // Listen for incoming Supabase messages (DMs)
-    useEffect(() => {
-        if (!isOfflineMode && !isWifiMode && activeChat) {
-            const unsubscribe = supabaseRelayService.subscribeToMessages(async (msg: SupabaseMessage) => {
-                if (msg.conversation_id === activeChat) {
-                    if (msg.sender_wallet === currentUser?.address) return;
-
-                    let text = "[Encrypted Message]";
-                    // Decrypt logic
-                    if (activeChat === 'global_public_channel') {
-                        text = msg.ciphertext;
-                    } else {
-                        const chat = chats.find(c => c.id === activeChat);
-                        const recipientAddress = chat?.participants.find(p => p !== currentUser?.address);
-
-                        if (recipientAddress && messagingKeyPair) {
-                            if (msg.sender_wallet === recipientAddress) {
-                                const senderPubKeyBase64 = await supabaseRelayService.getUserPublicKey(msg.sender_wallet);
-                                if (senderPubKeyBase64) {
-                                    const senderPubKey = await KeyManager.importPublicKey(senderPubKeyBase64);
-                                    const sharedKey = await KeyManager.deriveSharedKey(messagingKeyPair.privateKey, senderPubKey);
-                                    try {
-                                        text = await KeyManager.decrypt(sharedKey, msg.ciphertext, msg.iv);
-                                    } catch (e) {
-                                        console.error("Decryption failed", e);
-                                    }
-                                }
-                            }
-                        }
-                    }
-
-                    handleIncomingMessage(activeChat, {
-                        id: msg.id,
-                        text: text,
-                        isSent: false,
-                        timestamp: new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-                        sender: msg.sender_wallet.slice(0, 6),
-                        status: 'read',
-                        type: 'text',
-                        isMesh: false
-                    });
-                }
-            });
-            return () => unsubscribe();
-        }
-    }, [isOfflineMode, isWifiMode, activeChat, currentUser, messagingKeyPair, chats, handleIncomingMessage]);
+    // MOVED TO GlobalMessageListener.tsx to handle background updates and unread counts!
+    // We no longer subscribe here to avoid duplicates.
 
     // Load History from Supabase on chat switch (Smart Sync)
     useEffect(() => {

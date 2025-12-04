@@ -39,6 +39,16 @@ export class CommandHandler {
                 addNotification('info', `Notifications muted for ${cmd.args[0] || '1h'}`);
                 return true;
 
+            case 'flip':
+                return this.handleFlip(cmd.args, chatId, currentUserAddress, addMessage);
+
+            case 'market':
+                return this.handleMarket(cmd.args, chatId, currentUserAddress, addMessage);
+
+            case 'buy':
+            case 'swap':
+                return this.handleBuy(cmd.args, chatId, currentUserAddress, addMessage);
+
             default:
                 return false;
         }
@@ -148,6 +158,108 @@ export class CommandHandler {
             timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
             sender: 'You',
             type: 'text'
+        };
+
+        addMessage(chatId, message);
+        return true;
+    }
+
+    private static async handleFlip(args: string[], chatId: string, sender: string, addMessage: (chatId: string, msg: Message) => void): Promise<boolean> {
+        // Usage: #flip <amount> <side> (e.g. #flip 0.1 heads)
+        if (args.length < 2) return false;
+
+        const [amount, side] = args;
+        const validSides = ['heads', 'tails'];
+        if (!validSides.includes(side.toLowerCase())) return false;
+
+        const message: Message = {
+            id: Date.now().toString(),
+            text: `🎲 Coin Flip Challenge! Bet: ${amount} ETH on ${side.toUpperCase()}`,
+            isSent: true,
+            timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+            sender: 'You',
+            type: 'text',
+            game: {
+                type: 'coinflip',
+                stake: amount,
+                token: 'ETH',
+                status: 'open',
+                players: [sender],
+                result: side.toLowerCase() // Storing the challenger's pick
+            }
+        };
+
+        addMessage(chatId, message);
+        return true;
+    }
+
+    private static async handleMarket(args: string[], chatId: string, sender: string, addMessage: (chatId: string, msg: Message) => void): Promise<boolean> {
+        // Usage: #market "Question" Option1 Option2 ...
+        // Example: #market "Will BTC hit 100k?" Yes No
+
+        // Simple parser for quoted strings
+        const fullArgs = args.join(' ');
+        const questionMatch = fullArgs.match(/"([^"]+)"/);
+
+        if (!questionMatch) return false;
+
+        const question = questionMatch[1];
+        const remainingArgs = fullArgs.replace(questionMatch[0], '').trim().split(/\s+/).filter(s => s.length > 0);
+
+        const options = remainingArgs.length >= 2 ? remainingArgs : ['Yes', 'No'];
+
+        const message: Message = {
+            id: Date.now().toString(),
+            text: `🔮 Prediction Market: ${question}`,
+            isSent: true,
+            timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+            sender: 'You',
+            type: 'text',
+            market: {
+                id: Date.now().toString(),
+                question,
+                options: options.map((opt, i) => ({
+                    id: i.toString(),
+                    text: opt,
+                    pool: 0,
+                    holders: {}
+                })),
+                endTime: Date.now() + 24 * 60 * 60 * 1000, // 24 hours default
+                totalVolume: 0,
+                status: 'open',
+                creator: sender
+            }
+        };
+
+        addMessage(chatId, message);
+        return true;
+    }
+
+    private static async handleBuy(args: string[], chatId: string, sender: string, addMessage: (chatId: string, msg: Message) => void): Promise<boolean> {
+        // Usage: #buy <token> <amount>
+        // Example: #buy ETH 0.1
+
+        if (args.length < 2) return false;
+
+        const tokenSymbol = args[0].toUpperCase();
+        const amount = parseFloat(args[1]);
+
+        if (isNaN(amount) || amount <= 0) return false;
+
+        const message: Message = {
+            id: Date.now().toString(),
+            text: `💸 Requesting Buy: ${amount} ${tokenSymbol}`,
+            isSent: true,
+            timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+            sender: 'You',
+            type: 'text',
+            trade: {
+                id: Date.now().toString(),
+                tokenSymbol,
+                amount,
+                status: 'pending',
+                from: sender
+            }
         };
 
         addMessage(chatId, message);

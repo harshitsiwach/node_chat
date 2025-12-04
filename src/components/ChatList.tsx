@@ -40,6 +40,11 @@ export const ChatList = () => {
                             {isOnline(chat) && (
                                 <span className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse shadow-[0_0_5px_#22c55e]" title="Online"></span>
                             )}
+                            {chat.unreadCount > 0 && (
+                                <span className="ml-auto bg-cyber-yellow text-black text-[10px] font-bold px-1.5 py-0.5 rounded-full">
+                                    {chat.unreadCount}
+                                </span>
+                            )}
                         </div>
                         <div className="flex justify-between items-center opacity-60">
                             <span className="truncate max-w-[120px]">{chat.lastMessage || 'No messages'}</span>

@@ -30,6 +30,9 @@ export const TerminalInput = ({ onSendMessage }: TerminalInputProps) => {
   const { addNotification } = useNotificationStore();
 
   const AVAILABLE_COMMANDS = [
+    { command: '#market', description: 'Create prediction market (e.g. #market "Q" Yes No)', icon: '🔮' },
+    { command: '#buy', description: 'Swap tokens (e.g. #buy ETH 0.1)', icon: '💸' },
+    { command: '#flip', description: 'Coin flip duel (e.g. #flip 0.1)', icon: '🪙' },
     { command: '#poll', description: 'Create a poll (e.g. #poll Question|Opt1|Opt2)', icon: '📊' },
     { command: '#pin', description: 'Pin a message (e.g. #pin <msg_id>)', icon: '📌' },
     { command: '#send', description: 'Send crypto (e.g. #send <addr> <amt> <token>)', icon: '💸' },
@@ -38,17 +41,28 @@ export const TerminalInput = ({ onSendMessage }: TerminalInputProps) => {
     { command: '#nft-check', description: 'Check NFT access for group', icon: '🛡️' },
   ];
 
-  const filteredCommands = AVAILABLE_COMMANDS.filter(cmd =>
-    cmd.command.toLowerCase().startsWith(commandFilter.toLowerCase())
-  );
+  const filteredCommands = AVAILABLE_COMMANDS.filter(cmd => {
+    const search = commandFilter.toLowerCase();
+    const cmdName = cmd.command.toLowerCase(); // e.g. #market
+
+    if (search.startsWith('/')) {
+      // If user typed /market, match against #market
+      return cmdName.replace('#', '').startsWith(search.replace('/', ''));
+    }
+    return cmdName.startsWith(search);
+  });
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value;
     setInput(value);
 
-    if (value.startsWith('#')) {
+    if (value.startsWith('#') || value.startsWith('/')) {
       setShowCommandList(true);
-      setCommandFilter(value.split(' ')[0]); // Filter by the command part only
+      // Normalize filter to always compare against commands (which are stored with #)
+      // If user typed /, we want to match against #command but ignore the prefix for filtering
+      // We need to update how we filter. 
+      // Instead of changing the filter here, let's just pass the raw value and handle it in the filter function
+      setCommandFilter(value.split(' ')[0]);
       setSelectedIndex(0);
     } else {
       setShowCommandList(false);
@@ -183,8 +197,8 @@ export const TerminalInput = ({ onSendMessage }: TerminalInputProps) => {
               key={cmd.command}
               onClick={() => handleCommandSelect(cmd.command)}
               className={`w-full text-left px-4 py-2 flex items-center gap-3 font-mono text-sm transition-colors ${index === selectedIndex
-                  ? 'bg-cyber-yellow text-cyber-black'
-                  : 'text-gray-300 hover:bg-gray-900'
+                ? 'bg-cyber-yellow text-cyber-black'
+                : 'text-gray-300 hover:bg-gray-900'
                 }`}
             >
               <span className="text-lg">{cmd.icon}</span>
