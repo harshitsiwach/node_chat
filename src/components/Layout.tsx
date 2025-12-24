@@ -43,7 +43,7 @@ export const Layout = () => {
     };
 
     return (
-        <div className="flex h-screen w-screen bg-cyber-black overflow-hidden relative select-none pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)]">
+        <div className="flex h-[100dvh] w-screen bg-cyber-black overflow-hidden relative select-none pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)]">
             {/* Scanline Overlay */}
             <div className="absolute inset-0 pointer-events-none z-50 bg-scanline opacity-10 mix-blend-overlay"></div>
 
